@@ -1,7 +1,13 @@
 package com.swiftdrop.gateway.service;
 
+import com.swiftdrop.gateway.entity.CourierEntity;
+import com.swiftdrop.gateway.entity.ParcelEntity;
 import com.swiftdrop.gateway.model.CourierRecord;
 import com.swiftdrop.gateway.model.ParcelRecord;
+import com.swiftdrop.gateway.repository.CourierRepository;
+import com.swiftdrop.gateway.repository.ParcelRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -12,98 +18,57 @@ import java.util.stream.Collectors;
 @Service
 public class ParcelDatabaseService {
 
-    private final List<ParcelRecord> parcels = new ArrayList<>();
-    private final List<CourierRecord> couriers = new ArrayList<>();
+    private static final Logger logger = LoggerFactory.getLogger(ParcelDatabaseService.class);
 
-    public ParcelDatabaseService() {
-        seedInitialData();
-    }
+    private final ParcelRepository parcelRepository;
+    private final CourierRepository courierRepository;
 
-    private void seedInitialData() {
-        // Couriers
-        couriers.add(new CourierRecord("cou_001", "Nimal Senanayake", "076-9876543", "Bike", "WP-2345", 4.8, true));
-        couriers.add(new CourierRecord("cou_002", "Kasun Fernando", "071-2345678", "Scooter", "CP-9876", 4.6, true));
-        couriers.add(new CourierRecord("cou_003", "Priya Ranasinghe", "070-5566778", "Van", "SP-1122", 4.9, false));
-        couriers.add(new CourierRecord("cou_004", "Dilshan Jayawardena", "077-8899001", "Bike", "NW-4433", 4.4, true));
-
-        // Parcels
-        parcels.add(new ParcelRecord(
-                "prc_001", "SWF-2024-001234", "delivered",
-                "usr_001", "Amal Perera", "077-1234567",
-                "Kamani Silva", "072-3456789", "45 Galle Road, Colombo", "12 Kandy Road, Colombo",
-                "Electronics - Laptop", 2.5, 435.0, "paid",
-                "Nimal Senanayake", "076-9876543", "2024-11-01",
-                List.of("Booking confirmed", "Picked up from Kandy Road", "In transit", "Delivered successfully")
-        ));
-
-        parcels.add(new ParcelRecord(
-                "prc_002", "SWF-2024-001235", "in_transit",
-                "usr_001", "Amal Perera", "077-1234567",
-                "Roshan Mendis", "071-8765432", "88 Flower Road, Kandy", "12 Kandy Road, Colombo",
-                "Clothes & Accessories", 0.8, 380.0, "paid",
-                "Kasun Fernando", "071-2345678", "2024-11-10",
-                List.of("Booking confirmed", "Courier assigned", "Picked up", "In transit to Kandy hub")
-        ));
-
-        parcels.add(new ParcelRecord(
-                "prc_003", "SWF-2024-001236", "pending",
-                "usr_001", "Amal Perera", "077-1234567",
-                "Dilini Jayasekara", "075-5554433", "22 Main Street, Galle", "12 Kandy Road, Colombo",
-                "Books", 1.2, 350.0, "pending",
-                "Unassigned", "-", "2024-11-12",
-                List.of("Booking confirmed, awaiting courier assignment")
-        ));
-
-        parcels.add(new ParcelRecord(
-                "prc_004", "SWF-2024-001237", "assigned",
-                "usr_002", "Lanka Traders", "011-5678900",
-                "Thilak Bandara", "076-1122334", "5 Lake Drive, Kurunegala", "78 Industrial Zone, Colombo",
-                "Auto Parts", 5.0, 750.0, "paid",
-                "Nimal Senanayake", "076-9876543", "2024-11-11",
-                List.of("Booking confirmed", "Assigned to Nimal Senanayake for pickup")
-        ));
-
-        parcels.add(new ParcelRecord(
-                "prc_005", "SWF-2024-001238", "picked_up",
-                "usr_002", "Lanka Traders", "011-5678900",
-                "Sunil Wickrama", "070-9988776", "10 Temple Road, Negombo", "78 Industrial Zone, Colombo",
-                "Garments (3 boxes)", 3.5, 620.0, "pending",
-                "Dilshan Jayawardena", "077-8899001", "2024-11-10",
-                List.of("Booking confirmed", "Picked up from sender, arriving at sorting center")
-        ));
-
-        parcels.add(new ParcelRecord(
-                "prc_006", "SWF-2024-001239", "delivered",
-                "usr_002", "Lanka Traders", "011-5678900",
-                "Nalini Kumar", "074-6677889", "99 Green Path, Colombo", "78 Industrial Zone, Colombo",
-                "Household Items", 1.0, 350.0, "paid",
-                "Priya Ranasinghe", "070-5566778", "2024-11-05",
-                List.of("Booking confirmed", "Picked up", "Out for delivery", "Delivered with signature")
-        ));
+    public ParcelDatabaseService(ParcelRepository parcelRepository, CourierRepository courierRepository) {
+        this.parcelRepository = parcelRepository;
+        this.courierRepository = courierRepository;
     }
 
     public List<ParcelRecord> findParcelsByUserId(String userId) {
         if (userId == null || userId.isBlank()) return Collections.emptyList();
-        return parcels.stream()
-                .filter(p -> userId.equalsIgnoreCase(p.getSenderId()))
-                .collect(Collectors.toList());
+        try {
+            List<ParcelEntity> entities = parcelRepository.findBySenderId(userId.trim());
+            return entities.stream().map(this::toRecord).collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.warn("Could not query parcels from PostgreSQL for user {}: {}", userId, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     public Optional<ParcelRecord> findByTrackingNumber(String trackingNumber) {
         if (trackingNumber == null || trackingNumber.isBlank()) return Optional.empty();
-        String cleaned = trackingNumber.trim().toUpperCase(Locale.ROOT);
-        return parcels.stream()
-                .filter(p -> p.getTrackingNumber().equalsIgnoreCase(cleaned))
-                .findFirst();
+        try {
+            return parcelRepository.findByTrackingNumberIgnoreCase(trackingNumber.trim())
+                    .map(this::toRecord);
+        } catch (Exception e) {
+            logger.warn("Could not query tracking number {} from PostgreSQL: {}", trackingNumber, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     public List<CourierRecord> getAllCouriers() {
-        return Collections.unmodifiableList(couriers);
+        try {
+            return courierRepository.findAll().stream()
+                    .map(c -> new CourierRecord(
+                            c.getId(),
+                            c.getName(),
+                            c.getPhone(),
+                            c.getVehicleType(),
+                            c.getVehiclePlate(),
+                            c.getRating() != null ? c.getRating() : 5.0,
+                            Boolean.TRUE.equals(c.getIsAvailable())
+                    ))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.warn("Could not query couriers from PostgreSQL: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
-    /**
-     * Extracts potential tracking number mentions like SWF-2024-001234 from text.
-     */
     public Optional<String> extractTrackingNumber(String query) {
         if (query == null) return Optional.empty();
         Pattern pattern = Pattern.compile("(?i)(SWF-[0-9A-Z-]+|SWD-[0-9A-Z-]+)");
@@ -114,14 +79,11 @@ public class ParcelDatabaseService {
         return Optional.empty();
     }
 
-    /**
-     * Builds live database context dynamically based on the user's ID and query.
-     */
     public String buildDatabaseContext(String userId, String query) {
         StringBuilder sb = new StringBuilder();
-        sb.append("=== SWIFTDROP DATABASE LIVE CONTEXT ===\n");
+        sb.append("=== SWIFTDROP POSTGRESQL LIVE CONTEXT ===\n");
 
-        // 1. Check if a specific tracking number was mentioned
+        // 1. Specific tracking number
         Optional<String> trackingMention = extractTrackingNumber(query);
         if (trackingMention.isPresent()) {
             Optional<ParcelRecord> match = findByTrackingNumber(trackingMention.get());
@@ -134,15 +96,14 @@ public class ParcelDatabaseService {
                 sb.append("  - Recipient: ").append(p.getRecipientName()).append(" at ").append(p.getRecipientAddress()).append("\n");
                 sb.append("  - Courier Assigned: ").append(p.getCourierName()).append(" (Phone: ").append(p.getCourierPhone()).append(")\n");
                 sb.append("  - Fee: LKR ").append(p.getTotalFee()).append(" (Payment: ").append(p.getPaymentStatus()).append(")\n");
-                sb.append("  - Estimated Delivery: ").append(p.getEstimatedDeliveryDate()).append("\n");
-                sb.append("  - Status Updates: ").append(String.join(" -> ", p.getStatusHistory())).append("\n\n");
+                sb.append("  - Estimated Delivery: ").append(p.getEstimatedDeliveryDate()).append("\n\n");
             } else {
                 sb.append("SEARCH NOTICE: The tracking number '").append(trackingMention.get())
-                        .append("' was not found in the SwiftDrop database. Please ask the user to double check.\n\n");
+                        .append("' was not found in the SwiftDrop database. Ask user to check tracking number format.\n\n");
             }
         }
 
-        // 2. Fetch all parcels owned by the current user
+        // 2. User parcels
         List<ParcelRecord> userParcels = findParcelsByUserId(userId);
         if (!userParcels.isEmpty()) {
             sb.append("CURRENT LOGGED-IN USER PARCELS (User ID: ").append(userId).append("):\n");
@@ -158,15 +119,41 @@ public class ParcelDatabaseService {
             sb.append("CURRENT LOGGED-IN USER: ").append(userId).append(" (No active parcels found directly under this ID, or user is guest/courier).\n\n");
         }
 
-        // 3. Active Couriers summary
-        sb.append("AVAILABLE COURIERS ON DUTY:\n");
-        for (CourierRecord c : couriers) {
-            sb.append("  - ").append(c.getName()).append(" (").append(c.getVehicleType())
-                    .append(", Phone: ").append(c.getPhone())
-                    .append(", Available: ").append(c.isAvailable() ? "YES" : "NO").append(")\n");
+        // 3. Couriers
+        List<CourierRecord> couriers = getAllCouriers();
+        if (!couriers.isEmpty()) {
+            sb.append("AVAILABLE COURIERS ON DUTY:\n");
+            for (CourierRecord c : couriers) {
+                sb.append("  - ").append(c.getName()).append(" (").append(c.getVehicleType())
+                        .append(", Phone: ").append(c.getPhone())
+                        .append(", Available: ").append(c.isAvailable() ? "YES" : "NO").append(")\n");
+            }
         }
-        sb.append("=======================================\n");
+        sb.append("=========================================\n");
 
         return sb.toString();
+    }
+
+    private ParcelRecord toRecord(ParcelEntity entity) {
+        return new ParcelRecord(
+                entity.getId(),
+                entity.getTrackingNumber(),
+                entity.getStatus(),
+                entity.getSenderId(),
+                entity.getSenderName(),
+                entity.getSenderPhone(),
+                entity.getRecipientName(),
+                entity.getRecipientPhone(),
+                entity.getRecipientAddress(),
+                entity.getPickupAddress(),
+                entity.getDescription(),
+                entity.getWeight() != null ? entity.getWeight() : 0.0,
+                entity.getTotalFee() != null ? entity.getTotalFee() : 0.0,
+                entity.getPaymentStatus(),
+                entity.getCourierName(),
+                entity.getCourierPhone(),
+                entity.getEstimatedDeliveryDate(),
+                List.of("Current Status: " + entity.getStatus())
+        );
     }
 }
