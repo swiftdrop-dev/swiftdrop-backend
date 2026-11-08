@@ -7,6 +7,11 @@ target/
 .env.*
 !.env.example
 
+
+**/application-local.properties
+*application-local.properties
+!application-local.properties.example
+
 # IDE
 .idea/
 .vscode/
