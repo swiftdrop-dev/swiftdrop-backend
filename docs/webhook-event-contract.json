@@ -1,0 +1,10 @@
+{
+  "eventId": "unique-stable-id-from-publisher",
+  "event": "parcel.status.changed",
+  "merchantId": "dev-nathasha",
+  "trackingNumber": "SD-LOCAL-TEST",
+  "merchantOrderRef": "LOCAL-TEST-ORDER",
+  "status": "DELIVERED",
+  "timestamp": "2026-11-10T04:00:00Z",
+  "test": true
+}

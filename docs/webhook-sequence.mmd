@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant P as Status event publisher (M9)
+    participant Q as RabbitMQ
+    participant C as Webhook consumer
+    participant DB as Webhook database
+    participant W as Delivery worker
+    participant M as Merchant receiver
+    participant UI as Merchant delivery log
+    P->>Q: parcel.status.changed (stable eventId, merchantId)
+    Q->>C: Deliver event
+    C->>DB: Insert unique subscription/event delivery
+    C-->>Q: Acknowledge after durable insert
+    W->>DB: Claim due delivery with expiring lease
+    W->>M: POST exact payload + HMAC signature
+    alt 2xx response
+        W->>DB: SUCCESS + attempt history
+    else Failure
+        W->>DB: RETRYING with exponential delay
+        Note over W,DB: Three total attempts per run
+        W->>DB: DEAD_LETTER + durable outbox
+        C->>Q: Publish dead-letter notification with confirmation
+    end
+    UI->>DB: Read owned delivery through API
+    UI->>C: Replay dead-letter delivery
+    C->>DB: Requeue original event; preserve history
+    W->>M: Retry original eventId after receiver recovers
