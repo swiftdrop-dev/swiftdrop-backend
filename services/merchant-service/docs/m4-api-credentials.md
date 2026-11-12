@@ -1,5 +1,8 @@
 # M4 Phase 2: API credential management
 
+The disabled M5 façade and proposed machine-authentication contract are described in
+[m5-merchant-orders.md](m5-merchant-orders.md). M4 behavior/security remain unchanged.
+
 All production HTTP requests remain denied by the unchanged Phase 1 security
 configuration. Credential controllers, service and verifier beans are conditional
 on the existing disabled `merchant.persistence.enabled` property. No datasource,

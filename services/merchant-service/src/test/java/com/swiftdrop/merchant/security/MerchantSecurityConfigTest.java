@@ -23,6 +23,9 @@ class MerchantSecurityConfigTest {
   assertFalse(context.containsBean("flyway"));
   assertFalse(context.containsBean("merchantService"));
   assertFalse(context.containsBean("merchantApiCredentialService"));
+  assertFalse(context.containsBean("merchantOrderService"));
+  assertFalse(context.containsBean("merchantOrderController"));
+  assertTrue(context.getBeansOfType(com.swiftdrop.merchant.client.ParcelClient.class).isEmpty());
   assertTrue(context.getBeansOfType(com.swiftdrop.merchant.repository.MerchantApiCredentialRepository.class).isEmpty());
   assertTrue(context.getBeansOfType(MerchantApiKeyVerifier.class).isEmpty());
   assertTrue(context.getBean(MerchantIdentityResolver.class) instanceof UnavailableMerchantIdentityResolver);
@@ -36,6 +39,11 @@ class MerchantSecurityConfigTest {
  @Test void credentialManagementRemainsDenied() throws Exception {
   mvc.perform(get("/api/v1/merchant/me/api-keys")).andExpect(status().isUnauthorized());
   mvc.perform(post("/api/v1/merchant/me/api-keys").with(csrf()).contentType("application/json").content("{}"))
+      .andExpect(status().isUnauthorized());
+ }
+ @Test void orderRoutesRemainDenied() throws Exception {
+  mvc.perform(get("/api/v1/merchant/orders").header("X-API-Key","unverified")).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/merchant/orders").with(csrf()).header("X-API-Key","unverified").contentType("application/json").content("{}"))
       .andExpect(status().isUnauthorized());
  }
 }
