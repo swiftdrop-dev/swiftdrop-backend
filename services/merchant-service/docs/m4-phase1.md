@@ -1,5 +1,8 @@
 # M4 Phase 1: merchant onboarding
 
+Phase 2 credential management is documented in [m4-api-credentials.md](m4-api-credentials.md).
+Its APIs remain dormant behind the same persistence and HTTP security boundaries.
+
 This implementation is dormant by default. The existing datasource auto-configuration
 exclusion is preserved. `merchant.persistence.enabled=false` prevents service and
 controller creation. All HTTP requests are denied; there is no login, basic-auth,

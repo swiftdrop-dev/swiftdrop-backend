@@ -22,6 +22,9 @@ class MerchantSecurityConfigTest {
   assertTrue(context.getBeansOfType(MerchantRepository.class).isEmpty());
   assertFalse(context.containsBean("flyway"));
   assertFalse(context.containsBean("merchantService"));
+  assertFalse(context.containsBean("merchantApiCredentialService"));
+  assertTrue(context.getBeansOfType(com.swiftdrop.merchant.repository.MerchantApiCredentialRepository.class).isEmpty());
+  assertTrue(context.getBeansOfType(MerchantApiKeyVerifier.class).isEmpty());
   assertTrue(context.getBean(MerchantIdentityResolver.class) instanceof UnavailableMerchantIdentityResolver);
  }
  @Test void anonymousDenied() throws Exception { mvc.perform(get("/api/v1/merchant/me")).andExpect(status().isUnauthorized()); }
@@ -30,4 +33,9 @@ class MerchantSecurityConfigTest {
   mvc.perform(post("/api/v1/admin/merchants/00000000-0000-0000-0000-000000000001/review").with(csrf()).contentType("application/json").content("{\"decision\":\"APPROVED\"}")).andExpect(status().isForbidden());
  }
  @Test void unverifiedHeadersDenied() throws Exception { mvc.perform(get("/api/v1/merchant/me").header("X-User-Id","owner").header("Authorization","Bearer unverified")).andExpect(status().isUnauthorized()); }
+ @Test void credentialManagementRemainsDenied() throws Exception {
+  mvc.perform(get("/api/v1/merchant/me/api-keys")).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/merchant/me/api-keys").with(csrf()).contentType("application/json").content("{}"))
+      .andExpect(status().isUnauthorized());
+ }
 }
