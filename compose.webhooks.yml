@@ -1,0 +1,15 @@
+services:
+  webhook-rabbitmq:
+    image: rabbitmq:4-management
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - webhook-rabbitmq:/var/lib/rabbitmq
+volumes:
+  webhook-rabbitmq:
