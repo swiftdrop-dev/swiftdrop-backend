@@ -1,0 +1,36 @@
+erDiagram
+    SUBSCRIPTIONS ||--o{ DELIVERIES : receives
+    DELIVERIES ||--o{ DELIVERY_ATTEMPTS : records
+    DELIVERIES ||--o{ DEAD_LETTER_OUTBOX : publishes
+    SUBSCRIPTIONS {
+        uuid id PK
+        varchar merchant_id "opaque local identity; team contract pending"
+        varchar callback_url
+        varchar event_type
+        boolean is_active
+    }
+    DELIVERIES {
+        uuid id PK
+        uuid subscription_id FK
+        varchar event_id "unique with subscription_id"
+        text payload
+        varchar callback_url "snapshot"
+        varchar status
+        int attempts
+        int replay_count
+        timestamp next_attempt_at
+        timestamp lease_until
+    }
+    DELIVERY_ATTEMPTS {
+        uuid id PK
+        uuid delivery_id FK
+        int attempt_number
+        int replay_number
+        int response_code
+        varchar failure_reason
+    }
+    DEAD_LETTER_OUTBOX {
+        uuid id PK
+        uuid delivery_id FK
+        boolean published
+    }
