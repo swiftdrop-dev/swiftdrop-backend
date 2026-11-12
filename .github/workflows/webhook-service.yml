@@ -1,0 +1,28 @@
+name: Webhook service checks
+on:
+  pull_request:
+    paths: ['services/webhook-service/**', '.github/workflows/webhook-service.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/webhook-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B -ntp verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webhook-tests-and-coverage
+          path: |
+            services/webhook-service/target/surefire-reports
+            services/webhook-service/target/site/jacoco
