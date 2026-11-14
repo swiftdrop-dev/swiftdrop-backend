@@ -1,6 +1,8 @@
 package com.swiftdrop.parcel.exception;
 
 import com.swiftdrop.parcel.dto.response.RestErrorResponse;
+import com.swiftdrop.parcel.otp.OtpChallengeCooldownException;
+import com.swiftdrop.parcel.otp.OtpDeliveryUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -34,6 +36,16 @@ public class ParcelRestExceptionHandler {
     public ResponseEntity<RestErrorResponse> handleCourierAssignmentMismatch(
             CourierAssignmentMismatchException exception) {
         return error(HttpStatus.FORBIDDEN, exception.getMessage());
+    }
+
+    @ExceptionHandler(OtpChallengeCooldownException.class)
+    public ResponseEntity<RestErrorResponse> handleOtpCooldown(OtpChallengeCooldownException exception) {
+        return error(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage());
+    }
+
+    @ExceptionHandler(OtpDeliveryUnavailableException.class)
+    public ResponseEntity<RestErrorResponse> handleOtpDeliveryUnavailable(OtpDeliveryUnavailableException exception) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
     }
 
     @ExceptionHandler({

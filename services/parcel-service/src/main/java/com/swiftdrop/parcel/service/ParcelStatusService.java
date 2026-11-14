@@ -49,7 +49,7 @@ public class ParcelStatusService {
                 .orElseThrow(() -> new ParcelNotFoundException(parcelId));
 
         // Keep lock order aligned with ParcelAssignmentService: parcel row, then assignment row.
-        var activeAssignment = assignmentRepository.findByParcelIdAndUnassignedAtIsNull(parcelId)
+        var activeAssignment = assignmentRepository.findActiveByParcelIdForUpdate(parcelId)
                 .orElseThrow(() -> new ParcelStatusConflictException(
                         "Parcel has no current active courier assignment"));
         if (!trustedCourierId.equals(activeAssignment.getCourierId())) {

@@ -2,9 +2,11 @@ package com.swiftdrop.parcel.service;
 
 import com.swiftdrop.parcel.entity.ParcelAssignment;
 import com.swiftdrop.parcel.entity.Parcel;
+import com.swiftdrop.parcel.entity.ParcelDeliveryOtpChallenge;
 import com.swiftdrop.parcel.exception.AssignmentConflictException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
 import com.swiftdrop.parcel.repository.ParcelAssignmentRepository;
+import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
 import com.swiftdrop.parcel.repository.ParcelRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -18,10 +20,13 @@ import java.util.Objects;
 public class ParcelAssignmentService {
     private final ParcelAssignmentRepository assignmentRepository;
     private final ParcelRepository parcelRepository;
+    private final ParcelDeliveryOtpChallengeRepository otpChallengeRepository;
 
-    public ParcelAssignmentService(ParcelAssignmentRepository assignmentRepository, ParcelRepository parcelRepository) {
+    public ParcelAssignmentService(ParcelAssignmentRepository assignmentRepository, ParcelRepository parcelRepository,
+                                   ParcelDeliveryOtpChallengeRepository otpChallengeRepository) {
         this.assignmentRepository = assignmentRepository;
         this.parcelRepository = parcelRepository;
+        this.otpChallengeRepository = otpChallengeRepository;
     }
 
     /**
@@ -33,7 +38,7 @@ public class ParcelAssignmentService {
         Parcel parcel = parcelRepository.findByIdForUpdate(parcelId)
                 .orElseThrow(() -> new ParcelNotFoundException(parcelId));
         Instant now = Instant.now();
-        var activeAssignment = assignmentRepository.findByParcelIdAndUnassignedAtIsNull(parcelId);
+        var activeAssignment = assignmentRepository.findActiveByParcelIdForUpdate(parcelId);
 
         if (activeAssignment.isPresent()) {
             ParcelAssignment current = activeAssignment.get();
@@ -44,6 +49,16 @@ public class ParcelAssignmentService {
                 }
                 return new AssignmentOutcome(current, false);
             }
+        }
+
+        var outstandingChallenges = otpChallengeRepository.findUsableByParcelIdForUpdate(parcelId);
+        outstandingChallenges.forEach(challenge -> challenge.invalidateAt(now));
+        if (!outstandingChallenges.isEmpty()) {
+            otpChallengeRepository.saveAllAndFlush(outstandingChallenges);
+        }
+
+        if (activeAssignment.isPresent()) {
+            ParcelAssignment current = activeAssignment.get();
             current.closeAt(now);
             // Flush the close before inserting a replacement; the partial unique index
             // must no longer see the previous row as active when the identity insert runs.
