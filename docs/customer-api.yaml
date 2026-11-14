@@ -1,0 +1,219 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop M2 Customer Booking and History
+  version: 1.0.0
+  description: |
+    Implemented by parcel-service. Local demo uses H2 and demo pricing.
+    JWT must contain userId and role=customer (or CUSTOMER), plus exp, iss, aud.
+    Stored CREATED maps to pending in the frontend DTO.
+servers:
+  - url: http://localhost:8082
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/customer/parcels:
+    post:
+      operationId: createCustomerBooking
+      summary: Book a parcel for the authenticated customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateBooking'}
+      responses:
+        '201':
+          description: Booking and initial history saved atomically; Location contains its URL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Parcel'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Pricing unavailable; no booking is created}
+    get:
+      operationId: listCustomerParcels
+      summary: Search only the authenticated customer's parcels
+      parameters:
+        - {name: search, in: query, schema: {type: string, maxLength: 100}, description: Literal case-insensitive tracking number or recipient name search}
+        - {name: status, in: query, schema: {type: string, default: all, enum: [all, pending, created, assigned, picked_up, in_transit, out_for_delivery, delivered, failed, cancelled, returned, in_progress]}}
+        - {name: fromDate, in: query, schema: {type: string, format: date}, description: Inclusive Colombo calendar date}
+        - {name: toDate, in: query, schema: {type: string, format: date}, description: Inclusive Colombo calendar date}
+        - {name: sort, in: query, schema: {type: string, enum: [newest, oldest], default: newest}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, maximum: 100000, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 5}}
+      responses:
+        '200':
+          description: Stable ordering by createdAt then id; page is zero-based
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content: {type: array, items: {$ref: '#/components/schemas/Parcel'}}
+                  page: {type: integer}
+                  size: {type: integer}
+                  totalElements: {type: integer, format: int64}
+                  totalPages: {type: integer}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/customer/parcels/estimate:
+    post:
+      operationId: estimateCustomerBooking
+      summary: Estimate fee before booking without saving anything
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateBooking'}
+      responses:
+        '200':
+          description: Server quote; booking recalculates it
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalFee: {type: number, minimum: 0}
+                  estimatedDays: {type: integer, minimum: 1}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Pricing unavailable}
+  /api/v1/customer/parcels/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/ParcelId'}
+    get:
+      operationId: getCustomerParcel
+      summary: Get an owned parcel with its status history
+      responses:
+        '200':
+          description: Owned parcel
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Parcel'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Missing or owned by another customer}
+  /api/v1/customer/parcels/{id}/feedback:
+    parameters:
+      - {$ref: '#/components/parameters/ParcelId'}
+    put:
+      operationId: saveCustomerFeedback
+      summary: Create or replace feedback on an owned delivered parcel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rating]
+              properties:
+                rating: {type: integer, minimum: 1, maximum: 5}
+                comment: {type: string, maxLength: 1000, nullable: true}
+      responses:
+        '200':
+          description: Updated parcel
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Parcel'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Missing or owned by another customer}
+        '409': {description: Not delivered yet or concurrent update}
+  /api/v1/customer/dashboard:
+    get:
+      operationId: getCustomerDashboard
+      summary: Counts for only the authenticated customer
+      responses:
+        '200':
+          description: Customer counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: {type: integer, format: int64}
+                  pending: {type: integer, format: int64}
+                  inProgress: {type: integer, format: int64}
+                  delivered: {type: integer, format: int64}
+                  failed: {type: integer, format: int64}
+                  cancelled: {type: integer, format: int64}
+                  returned: {type: integer, format: int64}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ParcelId: {name: id, in: path, required: true, schema: {type: string}}
+  responses:
+    InvalidRequest:
+      description: Invalid fields, unsupported values or unknown properties; problem detail excludes rejected values
+    Unauthorized: {description: Missing or invalid JWT or userId}
+    Forbidden: {description: Customer role required}
+  schemas:
+    Address:
+      type: object
+      additionalProperties: false
+      required: [street, city, district]
+      properties:
+        street: {type: string, minLength: 1, maxLength: 200}
+        city: {type: string, minLength: 1, maxLength: 100}
+        district: {type: string, minLength: 1, maxLength: 100, description: One of the 25 Sri Lankan districts}
+        postalCode: {type: string, pattern: '^\d{5}$', nullable: true}
+    CreateBooking:
+      type: object
+      additionalProperties: false
+      required: [recipientName, recipientPhone, pickupAddress, recipientAddress, description, weight, size, paymentMethod]
+      properties:
+        recipientName: {type: string, minLength: 1, maxLength: 100}
+        recipientPhone: {type: string, pattern: '^(?:0[1-9]\d{8}|\+94[1-9]\d{8})$'}
+        pickupAddress: {$ref: '#/components/schemas/Address'}
+        recipientAddress: {$ref: '#/components/schemas/Address'}
+        description: {type: string, minLength: 1, maxLength: 500}
+        weight: {type: number, minimum: 0.01, maximum: 1000, multipleOf: 0.001}
+        size: {type: string, enum: [xs, sm, md, lg, xl]}
+        declaredValue: {type: number, minimum: 0, maximum: 10000000, multipleOf: 0.01, nullable: true}
+        fragile: {type: boolean, default: false}
+        specialInstructions: {type: string, maxLength: 1000, nullable: true}
+        paymentMethod: {type: string, enum: [cod, online]}
+    Parcel:
+      type: object
+      properties:
+        id: {type: string}
+        trackingNumber: {type: string}
+        status: {type: string, enum: [pending, assigned, picked_up, in_transit, out_for_delivery, delivered, failed, cancelled, returned]}
+        senderId: {type: string}
+        senderName: {type: string}
+        senderPhone: {type: string}
+        senderType: {type: string, enum: [customer]}
+        recipientName: {type: string}
+        recipientPhone: {type: string}
+        pickupAddress: {$ref: '#/components/schemas/Address'}
+        recipientAddress: {$ref: '#/components/schemas/Address'}
+        description: {type: string}
+        weight: {type: number}
+        size: {type: string}
+        declaredValue: {type: number, nullable: true}
+        fragile: {type: boolean}
+        specialInstructions: {type: string, nullable: true}
+        deliveryFee: {type: number}
+        totalFee: {type: number}
+        paymentStatus: {type: string}
+        paymentMethod: {type: string}
+        createdAt: {type: string, format: date-time}
+        estimatedDeliveryDate: {type: string, format: date}
+        statusHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              status: {type: string}
+              timestamp: {type: string, format: date-time}
+              note: {type: string}
+        rating: {type: integer, nullable: true}
+        feedbackComment: {type: string, nullable: true}
+        feedbackSubmittedAt: {type: string, format: date-time, nullable: true}
