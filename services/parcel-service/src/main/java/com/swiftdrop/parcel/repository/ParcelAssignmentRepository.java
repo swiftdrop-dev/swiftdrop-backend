@@ -22,6 +22,12 @@ public interface ParcelAssignmentRepository extends JpaRepository<ParcelAssignme
             + "where assignment.parcelId = :parcelId and assignment.unassignedAt is null")
     Optional<ParcelAssignment> findActiveByParcelIdForUpdate(@Param("parcelId") String parcelId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select assignment from ParcelAssignment assignment where assignment.id = :assignmentId "
+            + "and assignment.parcelId = :parcelId and assignment.unassignedAt is null")
+    Optional<ParcelAssignment> findActiveByIdAndParcelIdForUpdate(
+            @Param("assignmentId") Long assignmentId, @Param("parcelId") String parcelId);
+
     Page<ParcelAssignment> findByCourierIdAndAssignedAtGreaterThanEqualAndAssignedAtLessThanAndUnassignedAtIsNullOrderByAssignedAtAscIdAsc(
             String courierId, Instant startInclusive, Instant endExclusive, Pageable pageable);
 
