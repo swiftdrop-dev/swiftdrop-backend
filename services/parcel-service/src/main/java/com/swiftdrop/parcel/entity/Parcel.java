@@ -6,6 +6,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.DynamicUpdate;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "parcels", schema = "public")
 @DynamicUpdate
@@ -23,6 +25,13 @@ public class Parcel {
 
     @Column(name = "status", nullable = false, length = 32)
     private String status;
+
+    /**
+     * Existing PostgreSQL TIMESTAMP WITHOUT TIME ZONE column. New writes, when
+     * delivery is enabled, must use the documented UTC-naive convention.
+     */
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
 
     @Column(name = "estimated_delivery_date", length = 64)
     private String estimatedDeliveryDate;
@@ -61,6 +70,7 @@ public class Parcel {
     public String getCourierId() { return courierId; }
     public String getTrackingNumber() { return trackingNumber; }
     public String getStatus() { return status; }
+    public LocalDateTime getDeliveredAt() { return deliveredAt; }
     public String getEstimatedDeliveryDate() { return estimatedDeliveryDate; }
     public String getRecipientName() { return recipientName; }
     public String getRecipientPhone() { return recipientPhone; }
@@ -68,5 +78,9 @@ public class Parcel {
 
     public void assignTo(String courierId) {
         this.courierId = courierId;
+    }
+
+    public void changeStatus(String status) {
+        this.status = status;
     }
 }

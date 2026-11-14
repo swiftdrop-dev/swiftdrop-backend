@@ -25,6 +25,17 @@ public class ParcelRestExceptionHandler {
         return error(HttpStatus.CONFLICT, exception.getMessage());
     }
 
+    @ExceptionHandler(ParcelStatusConflictException.class)
+    public ResponseEntity<RestErrorResponse> handleStatusConflict(ParcelStatusConflictException exception) {
+        return error(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    @ExceptionHandler(CourierAssignmentMismatchException.class)
+    public ResponseEntity<RestErrorResponse> handleCourierAssignmentMismatch(
+            CourierAssignmentMismatchException exception) {
+        return error(HttpStatus.FORBIDDEN, exception.getMessage());
+    }
+
     @ExceptionHandler({
             InvalidRequestException.class,
             MethodArgumentNotValidException.class,
