@@ -92,7 +92,7 @@ class ParcelStatusServiceTest {
         Parcel parcel = new Parcel("prc_unassigned", null, "SWF-TEST", "pending", null,
                 "Recipient", "0700000000", "Address");
         when(parcelRepository.findByIdForUpdate("prc_unassigned")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_unassigned"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_unassigned"))
                 .thenReturn(Optional.empty());
         assertThrows(ParcelStatusConflictException.class,
                 () -> serviceWithFixedClock().updateStatus("prc_unassigned", "cou_001", "in_transit", null));
@@ -112,7 +112,7 @@ class ParcelStatusServiceTest {
         Parcel parcel = new Parcel("prc_001", courierId, "SWF-TEST", status, null,
                 "Recipient", "0700000000", "Address");
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.of(new ParcelAssignment("prc_001", courierId, NOW, null, null)));
         return parcel;
     }

@@ -1,6 +1,7 @@
 package com.swiftdrop.parcel.service;
 
 import com.swiftdrop.parcel.entity.ParcelAssignment;
+import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
 import com.swiftdrop.parcel.entity.Parcel;
 import com.swiftdrop.parcel.exception.AssignmentConflictException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
@@ -34,6 +35,9 @@ class ParcelAssignmentServiceTest {
     @Mock
     private ParcelRepository parcelRepository;
 
+    @Mock
+    private ParcelDeliveryOtpChallengeRepository otpChallengeRepository;
+
     @InjectMocks
     private ParcelAssignmentService assignmentService;
 
@@ -41,7 +45,7 @@ class ParcelAssignmentServiceTest {
     void firstAssignmentSynchronizesParcelAndCreatesHistory() {
         Parcel parcel = new Parcel("prc_001", null);
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.empty());
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -65,7 +69,7 @@ class ParcelAssignmentServiceTest {
         ParcelAssignment active = new ParcelAssignment("prc_001", "cou_001", Instant.now(), "dispatcher-1", null);
         Parcel parcel = new Parcel("prc_001", "cou_001");
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.of(active));
 
         var result = assignmentService.assign("prc_001", "cou_001", "dispatcher-2", "Retry");
@@ -83,7 +87,7 @@ class ParcelAssignmentServiceTest {
                 Instant.now().minusSeconds(600), "dispatcher-1", "Original");
         Parcel parcel = new Parcel("prc_001", "cou_001");
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.of(previous));
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -111,7 +115,7 @@ class ParcelAssignmentServiceTest {
     void legacyCurrentCourierWithoutHistoryStartsHistoryAtTheNewAssignmentOperation() {
         Parcel legacyParcel = new Parcel("prc_legacy", "cou_legacy");
         when(parcelRepository.findByIdForUpdate("prc_legacy")).thenReturn(Optional.of(legacyParcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_legacy"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_legacy"))
                 .thenReturn(Optional.empty());
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -141,7 +145,7 @@ class ParcelAssignmentServiceTest {
     void uniqueIndexViolationIsTranslatedToAssignmentConflict() {
         Parcel parcel = new Parcel("prc_001", null);
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.empty());
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException(
@@ -155,7 +159,7 @@ class ParcelAssignmentServiceTest {
     void assignmentLocksParcelRowBeforeReadingHistory() {
         Parcel parcel = new Parcel("prc_001", null);
         when(parcelRepository.findByIdForUpdate("prc_001")).thenReturn(Optional.of(parcel));
-        when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
+        when(assignmentRepository.findActiveByParcelIdForUpdate("prc_001"))
                 .thenReturn(Optional.empty());
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -164,6 +168,6 @@ class ParcelAssignmentServiceTest {
 
         var order = inOrder(parcelRepository, assignmentRepository);
         order.verify(parcelRepository).findByIdForUpdate("prc_001");
-        order.verify(assignmentRepository).findByParcelIdAndUnassignedAtIsNull("prc_001");
+        order.verify(assignmentRepository).findActiveByParcelIdForUpdate("prc_001");
     }
 }
