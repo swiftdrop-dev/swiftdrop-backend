@@ -46,12 +46,14 @@ class ParcelAssignmentServiceTest {
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ParcelAssignment assignment = assignmentService.assign("prc_001", "cou_001", "dispatcher-1", "Initial assignment");
+        var outcome = assignmentService.assign("prc_001", "cou_001", "dispatcher-1", "Initial assignment");
+        ParcelAssignment assignment = outcome.assignment();
 
         assertEquals("cou_001", parcel.getCourierId());
         assertEquals("prc_001", assignment.getParcelId());
         assertEquals("cou_001", assignment.getCourierId());
         assertNotNull(assignment.getAssignedAt());
+        org.junit.jupiter.api.Assertions.assertTrue(outcome.created());
         inOrder(parcelRepository, assignmentRepository)
                 .verify(parcelRepository).findByIdForUpdate("prc_001");
         verify(parcelRepository).saveAndFlush(parcel);
@@ -66,9 +68,10 @@ class ParcelAssignmentServiceTest {
         when(assignmentRepository.findByParcelIdAndUnassignedAtIsNull("prc_001"))
                 .thenReturn(Optional.of(active));
 
-        ParcelAssignment result = assignmentService.assign("prc_001", "cou_001", "dispatcher-2", "Retry");
+        var result = assignmentService.assign("prc_001", "cou_001", "dispatcher-2", "Retry");
 
-        assertEquals(active, result);
+        assertEquals(active, result.assignment());
+        org.junit.jupiter.api.Assertions.assertFalse(result.created());
         verify(assignmentRepository, never()).save(any(ParcelAssignment.class));
         verify(assignmentRepository, never()).saveAndFlush(any(ParcelAssignment.class));
         verify(parcelRepository, never()).saveAndFlush(any(Parcel.class));
@@ -85,13 +88,15 @@ class ParcelAssignmentServiceTest {
         when(assignmentRepository.saveAndFlush(any(ParcelAssignment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ParcelAssignment next = assignmentService.assign("prc_001", "cou_002", "dispatcher-2", "Courier reassigned");
+        var outcome = assignmentService.assign("prc_001", "cou_002", "dispatcher-2", "Courier reassigned");
+        ParcelAssignment next = outcome.assignment();
 
         assertEquals("cou_002", parcel.getCourierId());
         assertNotNull(previous.getUnassignedAt());
         assertEquals("cou_002", next.getCourierId());
         assertEquals("Courier reassigned", next.getReason());
         assertNotNull(next.getAssignedAt());
+        org.junit.jupiter.api.Assertions.assertTrue(outcome.created());
 
         ArgumentCaptor<ParcelAssignment> saved = ArgumentCaptor.forClass(ParcelAssignment.class);
         verify(assignmentRepository, org.mockito.Mockito.times(2)).saveAndFlush(saved.capture());
@@ -113,7 +118,7 @@ class ParcelAssignmentServiceTest {
 
         Instant beforeRequest = Instant.now();
         ParcelAssignment created = assignmentService.assign(
-                "prc_legacy", "cou_legacy", "dispatcher-1", "Legacy courier confirmed today");
+                "prc_legacy", "cou_legacy", "dispatcher-1", "Legacy courier confirmed today").assignment();
 
         assertEquals("cou_legacy", created.getCourierId());
         assertNotNull(created.getAssignedAt());
