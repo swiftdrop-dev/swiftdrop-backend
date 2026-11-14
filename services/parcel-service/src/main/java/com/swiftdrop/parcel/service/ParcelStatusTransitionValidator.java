@@ -33,4 +33,14 @@ public class ParcelStatusTransitionValidator {
                     "Parcel status transition is not allowed: " + currentStatus + " -> " + requestedStatus);
         }
     }
+
+    /** Validates the dedicated proof-gated completion path without opening ordinary status updates. */
+    public void validateDeliveryCompletion(String currentStatus) {
+        if (currentStatus == null || !KNOWN_STATUSES.contains(currentStatus)) {
+            throw new ParcelStatusConflictException("Parcel has an unknown current status");
+        }
+        if (!IN_TRANSIT.equals(currentStatus)) {
+            throw new ParcelStatusConflictException("Only an in_transit parcel can be completed as delivered");
+        }
+    }
 }

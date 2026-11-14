@@ -81,6 +81,13 @@ public class ParcelDeliveryOtpChallenge {
         verifiedAt = now;
     }
 
+    public void consumeProofAt(Instant now) {
+        if (verifiedAt == null || otpConsumedAt == null || invalidatedAt != null || proofConsumedAt != null) {
+            throw new IllegalStateException("OTP proof is not available for delivery completion");
+        }
+        proofConsumedAt = now;
+    }
+
     public void invalidateAt(Instant now) {
         if (invalidatedAt == null && proofConsumedAt == null) {
             invalidatedAt = now;

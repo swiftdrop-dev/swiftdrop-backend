@@ -15,6 +15,12 @@ import java.util.UUID;
 public interface ParcelDeliveryPhotoProofRepository extends JpaRepository<ParcelDeliveryPhotoProof, UUID> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select proof from ParcelDeliveryPhotoProof proof "
+            + "where proof.id = :proofId and proof.assignmentId = :assignmentId")
+    Optional<ParcelDeliveryPhotoProof> findByIdAndAssignmentIdForUpdate(
+            @Param("proofId") UUID proofId, @Param("assignmentId") Long assignmentId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select proof from ParcelDeliveryPhotoProof proof where proof.assignmentId = :assignmentId "
             + "and proof.consumedAt is null and proof.invalidatedAt is null")
     Optional<ParcelDeliveryPhotoProof> findActiveByAssignmentIdForUpdate(

@@ -5,6 +5,7 @@ import com.swiftdrop.parcel.entity.Parcel;
 import com.swiftdrop.parcel.entity.ParcelDeliveryOtpChallenge;
 import com.swiftdrop.parcel.exception.AssignmentConflictException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
+import com.swiftdrop.parcel.exception.ParcelStatusConflictException;
 import com.swiftdrop.parcel.repository.ParcelAssignmentRepository;
 import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
 import com.swiftdrop.parcel.repository.ParcelDeliveryPhotoProofRepository;
@@ -41,6 +42,9 @@ public class ParcelAssignmentService {
     public AssignmentOutcome assign(String parcelId, String courierId, String changedBy, String reason) {
         Parcel parcel = parcelRepository.findByIdForUpdate(parcelId)
                 .orElseThrow(() -> new ParcelNotFoundException(parcelId));
+        if (ParcelStatusTransitionValidator.DELIVERED.equals(parcel.getStatus())) {
+            throw new ParcelStatusConflictException("A delivered parcel cannot be reassigned");
+        }
         Instant now = Instant.now();
         var activeAssignment = assignmentRepository.findActiveByParcelIdForUpdate(parcelId);
 
