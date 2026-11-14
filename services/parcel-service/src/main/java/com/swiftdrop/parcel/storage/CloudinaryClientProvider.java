@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 
 /** Creates the SDK client lazily so unrelated application startup does not require credentials. */
 public class CloudinaryClientProvider implements Supplier<Cloudinary> {
+    static final int CLOUDINARY_TIMEOUT_SECONDS = 30;
     private final CloudinaryStorageProperties properties;
     private volatile Cloudinary client;
 
@@ -26,6 +27,9 @@ public class CloudinaryClientProvider implements Supplier<Cloudinary> {
                             "cloud_name", properties.getCloudName(),
                             "api_key", properties.getApiKey(),
                             "api_secret", properties.getApiSecret(),
+                            // Cloudinary SDK's timeout config sets connect, connection-pool
+                            // acquisition, and response/read timeouts in seconds.
+                            "timeout", CLOUDINARY_TIMEOUT_SECONDS,
                             "secure", true));
                     client = current;
                 }

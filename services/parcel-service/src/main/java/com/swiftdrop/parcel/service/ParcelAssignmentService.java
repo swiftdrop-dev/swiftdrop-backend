@@ -7,6 +7,7 @@ import com.swiftdrop.parcel.exception.AssignmentConflictException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
 import com.swiftdrop.parcel.repository.ParcelAssignmentRepository;
 import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
+import com.swiftdrop.parcel.repository.ParcelDeliveryPhotoProofRepository;
 import com.swiftdrop.parcel.repository.ParcelRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -21,12 +22,15 @@ public class ParcelAssignmentService {
     private final ParcelAssignmentRepository assignmentRepository;
     private final ParcelRepository parcelRepository;
     private final ParcelDeliveryOtpChallengeRepository otpChallengeRepository;
+    private final ParcelDeliveryPhotoProofRepository photoProofRepository;
 
     public ParcelAssignmentService(ParcelAssignmentRepository assignmentRepository, ParcelRepository parcelRepository,
-                                   ParcelDeliveryOtpChallengeRepository otpChallengeRepository) {
+                                   ParcelDeliveryOtpChallengeRepository otpChallengeRepository,
+                                   ParcelDeliveryPhotoProofRepository photoProofRepository) {
         this.assignmentRepository = assignmentRepository;
         this.parcelRepository = parcelRepository;
         this.otpChallengeRepository = otpChallengeRepository;
+        this.photoProofRepository = photoProofRepository;
     }
 
     /**
@@ -59,6 +63,9 @@ public class ParcelAssignmentService {
 
         if (activeAssignment.isPresent()) {
             ParcelAssignment current = activeAssignment.get();
+            // Photo proof rows are invalidated under the parcel lock, after the assignment
+            // row lock, in the same transaction as closing this assignment.
+            photoProofRepository.invalidateUnconsumedByAssignmentId(current.getId(), now);
             current.closeAt(now);
             // Flush the close before inserting a replacement; the partial unique index
             // must no longer see the previous row as active when the identity insert runs.

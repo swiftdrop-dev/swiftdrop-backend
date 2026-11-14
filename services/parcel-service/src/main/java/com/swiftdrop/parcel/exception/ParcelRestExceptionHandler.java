@@ -3,6 +3,8 @@ package com.swiftdrop.parcel.exception;
 import com.swiftdrop.parcel.dto.response.RestErrorResponse;
 import com.swiftdrop.parcel.otp.OtpChallengeCooldownException;
 import com.swiftdrop.parcel.otp.OtpDeliveryUnavailableException;
+import com.swiftdrop.parcel.photo.DeliveryPhotoProofConflictException;
+import com.swiftdrop.parcel.photo.InvalidDeliveryPhotoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -32,6 +34,12 @@ public class ParcelRestExceptionHandler {
         return error(HttpStatus.CONFLICT, exception.getMessage());
     }
 
+    @ExceptionHandler(DeliveryPhotoProofConflictException.class)
+    public ResponseEntity<RestErrorResponse> handlePhotoProofConflict(
+            DeliveryPhotoProofConflictException exception) {
+        return error(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
     @ExceptionHandler(CourierAssignmentMismatchException.class)
     public ResponseEntity<RestErrorResponse> handleCourierAssignmentMismatch(
             CourierAssignmentMismatchException exception) {
@@ -50,6 +58,7 @@ public class ParcelRestExceptionHandler {
 
     @ExceptionHandler({
             InvalidRequestException.class,
+            InvalidDeliveryPhotoException.class,
             MethodArgumentNotValidException.class,
             MethodArgumentTypeMismatchException.class,
             MissingServletRequestParameterException.class,

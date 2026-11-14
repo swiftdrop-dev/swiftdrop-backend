@@ -2,6 +2,7 @@ package com.swiftdrop.parcel.service;
 
 import com.swiftdrop.parcel.entity.ParcelAssignment;
 import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
+import com.swiftdrop.parcel.repository.ParcelDeliveryPhotoProofRepository;
 import com.swiftdrop.parcel.entity.Parcel;
 import com.swiftdrop.parcel.exception.AssignmentConflictException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
@@ -37,6 +38,9 @@ class ParcelAssignmentServiceTest {
 
     @Mock
     private ParcelDeliveryOtpChallengeRepository otpChallengeRepository;
+
+    @Mock
+    private ParcelDeliveryPhotoProofRepository photoProofRepository;
 
     @InjectMocks
     private ParcelAssignmentService assignmentService;
