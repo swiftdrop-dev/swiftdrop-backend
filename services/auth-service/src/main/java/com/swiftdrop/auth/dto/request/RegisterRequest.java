@@ -20,10 +20,6 @@ public class RegisterRequest {
 
     private String phone;
 
-    // Accepts lowercase role strings from the frontend: customer, merchant, courier, dispatcher
-    @NotBlank(message = "Role is required")
-    private String role;
-
     public RegisterRequest() {}
 
     public String getName() { return name; }
@@ -38,7 +34,5 @@ public class RegisterRequest {
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
 }
 

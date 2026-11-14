@@ -33,22 +33,15 @@ public class AuthService {
             throw new IllegalArgumentException("Email already registered.");
         }
 
-        // 2. Parse and validate role (case-insensitive; frontend sends lowercase)
-        Role role;
-        try {
-            role = Role.fromString(request.getRole());
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid role: " + request.getRole());
-        }
-
-        // 3. Hash password and persist user
+        // Public self-registration always creates a customer. Privileged roles are
+        // assigned only through a separate, authorized provisioning process.
         String hashedPassword = passwordEncoder.encode(request.getPassword());
         User user = new User(
                 request.getName(),
                 request.getEmail(),
                 hashedPassword,
                 request.getPhone(),
-                role
+                Role.customer
         );
         userRepository.save(user);
 
