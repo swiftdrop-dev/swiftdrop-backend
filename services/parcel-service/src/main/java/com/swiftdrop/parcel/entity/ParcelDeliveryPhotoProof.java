@@ -96,6 +96,13 @@ public class ParcelDeliveryPhotoProof {
         }
     }
 
+    public void consumeAt(Instant at) {
+        if (verifiedAt == null || consumedAt != null || invalidatedAt != null) {
+            throw new IllegalStateException("Photo proof is not available for delivery completion");
+        }
+        consumedAt = at;
+    }
+
     public UUID getId() { return id; }
     public String getParcelId() { return parcelId; }
     public Long getAssignmentId() { return assignmentId; }

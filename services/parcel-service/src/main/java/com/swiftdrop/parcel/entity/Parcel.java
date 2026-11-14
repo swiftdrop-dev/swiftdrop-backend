@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "parcels", schema = "public")
@@ -82,5 +83,10 @@ public class Parcel {
 
     public void changeStatus(String status) {
         this.status = status;
+    }
+
+    public void completeDelivery(LocalDateTime deliveredAt) {
+        this.status = "delivered";
+        this.deliveredAt = Objects.requireNonNull(deliveredAt, "deliveredAt");
     }
 }
