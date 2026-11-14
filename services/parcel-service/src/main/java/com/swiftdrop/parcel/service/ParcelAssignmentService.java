@@ -29,7 +29,7 @@ public class ParcelAssignmentService {
      * assignment history, no earlier history is fabricated; this call starts history now.
      */
     @Transactional
-    public ParcelAssignment assign(String parcelId, String courierId, String changedBy, String reason) {
+    public AssignmentOutcome assign(String parcelId, String courierId, String changedBy, String reason) {
         Parcel parcel = parcelRepository.findByIdForUpdate(parcelId)
                 .orElseThrow(() -> new ParcelNotFoundException(parcelId));
         Instant now = Instant.now();
@@ -42,7 +42,7 @@ public class ParcelAssignmentService {
                     parcel.assignTo(courierId);
                     parcelRepository.saveAndFlush(parcel);
                 }
-                return current;
+                return new AssignmentOutcome(current, false);
             }
             current.closeAt(now);
             // Flush the close before inserting a replacement; the partial unique index
@@ -54,8 +54,9 @@ public class ParcelAssignmentService {
         parcelRepository.saveAndFlush(parcel);
 
         try {
-            return assignmentRepository.saveAndFlush(
+            ParcelAssignment created = assignmentRepository.saveAndFlush(
                     new ParcelAssignment(parcelId, courierId, now, changedBy, reason));
+            return new AssignmentOutcome(created, true);
         } catch (DataIntegrityViolationException exception) {
             if (isUniqueConstraintViolation(exception)) {
                 throw new AssignmentConflictException(parcelId, exception);

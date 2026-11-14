@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
@@ -55,7 +56,7 @@ class ParcelAssignmentTransactionTest {
 
     @Test
     void failedNewHistoryInsertRollsBackParcelUpdateAndPreviousClosure() {
-        parcelRepository.saveAndFlush(new Parcel("prc_rollback", "cou_old"));
+        parcelRepository.saveAndFlush(testParcel("prc_rollback", "cou_old"));
         ParcelAssignment oldAssignment = assignmentRepository.saveAndFlush(new ParcelAssignment(
                 "prc_rollback", "cou_old", Instant.now().minusSeconds(120), "dispatcher-old", "Original"));
         jdbcTemplate.execute("ALTER TABLE public.parcel_assignments ADD CONSTRAINT " + TEST_CONSTRAINT
@@ -76,18 +77,18 @@ class ParcelAssignmentTransactionTest {
 
     @Test
     void concurrentAssignmentsForOneParcelAreSerializedByParcelLock() throws Exception {
-        parcelRepository.saveAndFlush(new Parcel("prc_concurrent", null));
+        parcelRepository.saveAndFlush(testParcel("prc_concurrent", null));
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService workers = Executors.newFixedThreadPool(2);
 
         try {
-            Future<ParcelAssignment> first = workers.submit(() -> {
+            Future<?> first = workers.submit(() -> {
                 ready.countDown();
                 start.await();
                 return assignmentService.assign("prc_concurrent", "cou_first", "dispatcher-1", "First");
             });
-            Future<ParcelAssignment> second = workers.submit(() -> {
+            Future<?> second = workers.submit(() -> {
                 ready.countDown();
                 start.await();
                 return assignmentService.assign("prc_concurrent", "cou_second", "dispatcher-2", "Second");
@@ -115,7 +116,41 @@ class ParcelAssignmentTransactionTest {
         }
     }
 
+    @Test
+    void assignedAndHistoryQueriesUseIdAsTimestampTieBreaker() {
+        Instant tiedAt = Instant.parse("2026-11-14T06:25:00Z");
+        parcelRepository.saveAndFlush(testParcel("prc_tie_a", null));
+        parcelRepository.saveAndFlush(testParcel("prc_tie_b", null));
+        parcelRepository.saveAndFlush(testParcel("prc_tie_history", null));
+
+        ParcelAssignment activeA = assignmentRepository.saveAndFlush(
+                new ParcelAssignment("prc_tie_a", "cou_001", tiedAt, null, null));
+        ParcelAssignment activeB = assignmentRepository.saveAndFlush(
+                new ParcelAssignment("prc_tie_b", "cou_001", tiedAt, null, null));
+        List<Long> assignedIds = assignmentRepository
+                .findByCourierIdAndAssignedAtGreaterThanEqualAndAssignedAtLessThanAndUnassignedAtIsNullOrderByAssignedAtAscIdAsc(
+                        "cou_001", tiedAt.minusSeconds(1), tiedAt.plusSeconds(1), PageRequest.of(0, 10))
+                .getContent().stream().map(ParcelAssignment::getId).toList();
+
+        ParcelAssignment earlierId = new ParcelAssignment("prc_tie_history", "cou_old", tiedAt, null, null);
+        earlierId.closeAt(tiedAt.plusSeconds(1));
+        ParcelAssignment laterId = new ParcelAssignment("prc_tie_history", "cou_new", tiedAt, null, null);
+        laterId.closeAt(tiedAt.plusSeconds(2));
+        earlierId = assignmentRepository.saveAndFlush(earlierId);
+        laterId = assignmentRepository.saveAndFlush(laterId);
+        List<Long> historyIds = assignmentRepository.findByParcelIdOrderByAssignedAtAscIdAsc("prc_tie_history")
+                .stream().map(ParcelAssignment::getId).toList();
+
+        assertEquals(List.of(activeA.getId(), activeB.getId()), assignedIds);
+        assertEquals(List.of(earlierId.getId(), laterId.getId()), historyIds);
+    }
+
     private void dropFailureConstraint() {
         jdbcTemplate.execute("ALTER TABLE public.parcel_assignments DROP CONSTRAINT IF EXISTS " + TEST_CONSTRAINT);
+    }
+
+    private Parcel testParcel(String id, String courierId) {
+        return new Parcel(id, courierId, "SWF-TEST-" + id, "pending", null,
+                "Test Recipient", "0700000000", "Test delivery address");
     }
 }
