@@ -35,6 +35,7 @@ public class MerchantCredentialController {
     public ResponseEntity<ApiResponse<ApiKeyCreatedResponse>> generateKey(
             @PathVariable("merchantId") UUID merchantId,
             @Valid @RequestBody GenerateApiKeyRequest request) {
+        SecurityUtils.requireMerchantAccess(merchantId);
         ApiKeyCreatedResponse response = credentialService.generateApiKey(merchantId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("API key generated successfully. Copy the key now as it cannot be retrieved again.", response));
@@ -43,6 +44,7 @@ public class MerchantCredentialController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<MerchantApiCredentialResponse>>> listKeys(
             @PathVariable("merchantId") UUID merchantId) {
+        SecurityUtils.requireMerchantAccess(merchantId);
         List<MerchantApiCredentialResponse> credentials = credentialService.listCredentials(merchantId);
         return ResponseEntity.ok(ApiResponse.success(credentials));
     }
@@ -52,8 +54,8 @@ public class MerchantCredentialController {
             @PathVariable("merchantId") UUID merchantId,
             @PathVariable("credentialId") UUID credentialId,
             @RequestParam(value = "reason", required = false) String reason) {
-        UUID revokedBy = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        SecurityUtils.requireMerchantAccess(merchantId);
+        UUID revokedBy = SecurityUtils.requireCurrentUserId();
         credentialService.revokeCredential(merchantId, credentialId, revokedBy, reason);
         return ResponseEntity.ok(ApiResponse.success("API key revoked successfully", null));
     }
