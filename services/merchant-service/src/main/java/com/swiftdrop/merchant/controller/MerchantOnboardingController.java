@@ -38,8 +38,7 @@ public class MerchantOnboardingController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<MerchantResponse>> register(@Valid @RequestBody RegisterMerchantRequest request) {
-        UUID userId = SecurityUtils.getCurrentUserId()
-                .orElseThrow(() -> new IllegalArgumentException("User ID is missing from security context or X-User-Id header"));
+        UUID userId = SecurityUtils.requireCurrentUserId();
         MerchantResponse response = onboardingService.registerMerchant(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Merchant registered successfully in DRAFT status", response));
@@ -47,14 +46,14 @@ public class MerchantOnboardingController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<MerchantResponse>> getMyProfile() {
-        UUID userId = SecurityUtils.getCurrentUserId()
-                .orElseThrow(() -> new IllegalArgumentException("User ID is missing from security context or X-User-Id header"));
+        UUID userId = SecurityUtils.requireCurrentUserId();
         MerchantResponse response = onboardingService.getMerchantByUserId(userId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<MerchantResponse>> getById(@PathVariable("id") UUID id) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantResponse response = onboardingService.getMerchantById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
@@ -63,6 +62,7 @@ public class MerchantOnboardingController {
     public ResponseEntity<ApiResponse<MerchantResponse>> updateProfile(
             @PathVariable("id") UUID id,
             @Valid @RequestBody UpdateMerchantProfileRequest request) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantResponse response = onboardingService.updateProfile(id, request);
         return ResponseEntity.ok(ApiResponse.success("Profile updated successfully", response));
     }
@@ -71,6 +71,7 @@ public class MerchantOnboardingController {
     public ResponseEntity<ApiResponse<MerchantAddressResponse>> addAddress(
             @PathVariable("id") UUID id,
             @Valid @RequestBody AddMerchantAddressRequest request) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantAddressResponse response = onboardingService.addAddress(id, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Pickup address added successfully", response));
@@ -80,6 +81,7 @@ public class MerchantOnboardingController {
     public ResponseEntity<ApiResponse<MerchantBankAccountResponse>> setBankAccount(
             @PathVariable("id") UUID id,
             @Valid @RequestBody SetBankAccountRequest request) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantBankAccountResponse response = onboardingService.setBankAccount(id, request);
         return ResponseEntity.ok(ApiResponse.success("Settlement bank account configured successfully", response));
     }
@@ -88,6 +90,7 @@ public class MerchantOnboardingController {
     public ResponseEntity<ApiResponse<MerchantDocumentResponse>> uploadDocument(
             @PathVariable("id") UUID id,
             @Valid @RequestBody UploadDocumentRequest request) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantDocumentResponse response = onboardingService.uploadDocument(id, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("KYC document uploaded successfully", response));
@@ -95,6 +98,7 @@ public class MerchantOnboardingController {
 
     @PostMapping("/{id}/submit")
     public ResponseEntity<ApiResponse<MerchantResponse>> submit(@PathVariable("id") UUID id) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantResponse response = onboardingService.submitForVerification(id);
         return ResponseEntity.ok(ApiResponse.success("Merchant profile submitted for administrative verification", response));
     }
@@ -103,6 +107,7 @@ public class MerchantOnboardingController {
     public ResponseEntity<ApiResponse<MerchantResponse>> updateWebhook(
             @PathVariable("id") UUID id,
             @Valid @RequestBody UpdateWebhookRequest request) {
+        SecurityUtils.requireMerchantAccess(id);
         MerchantResponse response = onboardingService.updateWebhook(id, request);
         return ResponseEntity.ok(ApiResponse.success("Webhook endpoint updated", response));
     }

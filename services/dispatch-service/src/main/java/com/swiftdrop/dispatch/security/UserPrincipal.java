@@ -6,68 +6,31 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
-public class UserPrincipal implements UserDetails {
+/** Authenticated Auth Service identity. It intentionally contains no user, courier or dispatcher UUID. */
+public final class UserPrincipal implements UserDetails {
 
-    private final UUID id;
     private final String email;
-    private final List<String> roles;
+    private final String role;
 
-    public UserPrincipal(UUID id, String email, List<String> roles) {
-        this.id = id;
+    public UserPrincipal(String email, String role) {
         this.email = email;
-        this.roles = roles;
+        this.role = role;
     }
 
-    public UUID getId() {
-        return id;
-    }
+    public String getEmail() { return email; }
 
-    public String getEmail() {
-        return email;
-    }
-
-    public List<String> getRoles() {
-        return roles;
-    }
+    public String getRole() { return role; }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return roles.stream()
-                .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase(java.util.Locale.ROOT)));
     }
 
-    @Override
-    public String getPassword() {
-        return "";
-    }
-
-    @Override
-    public String getUsername() {
-        return email != null ? email : id.toString();
-    }
-
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
-
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
-
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
+    @Override public String getPassword() { return ""; }
+    @Override public String getUsername() { return email; }
+    @Override public boolean isAccountNonExpired() { return true; }
+    @Override public boolean isAccountNonLocked() { return true; }
+    @Override public boolean isCredentialsNonExpired() { return true; }
+    @Override public boolean isEnabled() { return true; }
 }

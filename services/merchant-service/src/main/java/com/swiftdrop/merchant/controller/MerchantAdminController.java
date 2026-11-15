@@ -53,8 +53,7 @@ public class MerchantAdminController {
     public ResponseEntity<ApiResponse<MerchantResponse>> approve(
             @PathVariable("id") UUID id,
             @RequestBody(required = false) MerchantApprovalRequest request) {
-        UUID adminId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        UUID adminId = SecurityUtils.requireAdminUserId();
         MerchantResponse response = adminService.approveMerchant(
                 id,
                 request != null ? request.getPricingTier() : null,
@@ -67,8 +66,7 @@ public class MerchantAdminController {
     public ResponseEntity<ApiResponse<MerchantResponse>> reject(
             @PathVariable("id") UUID id,
             @RequestBody MerchantApprovalRequest request) {
-        UUID adminId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        UUID adminId = SecurityUtils.requireAdminUserId();
         String reason = request != null ? request.getRejectionReason() : "Application rejected by admin";
         MerchantResponse response = adminService.rejectMerchant(id, reason, adminId);
         return ResponseEntity.ok(ApiResponse.success("Merchant application rejected", response));
@@ -80,8 +78,7 @@ public class MerchantAdminController {
             @PathVariable("docId") UUID docId,
             @RequestParam("approve") boolean approve,
             @RequestParam(value = "reason", required = false) String reason) {
-        UUID adminId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        UUID adminId = SecurityUtils.requireAdminUserId();
         MerchantDocumentResponse response = adminService.reviewDocument(id, docId, approve, reason, adminId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
@@ -90,8 +87,7 @@ public class MerchantAdminController {
     public ResponseEntity<ApiResponse<MerchantResponse>> suspend(
             @PathVariable("id") UUID id,
             @RequestParam(value = "reason", required = false) String reason) {
-        UUID adminId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        UUID adminId = SecurityUtils.requireAdminUserId();
         MerchantResponse response = adminService.suspendMerchant(id, reason, adminId);
         return ResponseEntity.ok(ApiResponse.success("Merchant suspended", response));
     }

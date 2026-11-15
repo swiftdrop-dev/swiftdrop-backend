@@ -16,11 +16,22 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URI;
 import java.util.Enumeration;
+import java.util.Set;
 
 @RestController
 public class GatewayProxyController {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayProxyController.class);
+    private static final Set<String> FORWARDED_REQUEST_HEADERS = Set.of(
+            HttpHeaders.AUTHORIZATION.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.ACCEPT.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.CONTENT_TYPE.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.IF_MATCH.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.IF_NONE_MATCH.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.IF_MODIFIED_SINCE.toLowerCase(java.util.Locale.ROOT),
+            HttpHeaders.IF_UNMODIFIED_SINCE.toLowerCase(java.util.Locale.ROOT),
+            "idempotency-key"
+    );
 
     private final RestClient restClient;
     private final String merchantServiceUrl;
@@ -34,7 +45,12 @@ public class GatewayProxyController {
         this.dispatchServiceUrl = dispatchServiceUrl;
     }
 
-    @RequestMapping(value = {"/api/v1/merchants/**", "/api/v1/dispatch/**"})
+    @RequestMapping(value = {"/api/v1/merchants/**", "/api/v1/dispatch/**"},
+            method = {org.springframework.web.bind.annotation.RequestMethod.GET,
+                    org.springframework.web.bind.annotation.RequestMethod.POST,
+                    org.springframework.web.bind.annotation.RequestMethod.PUT,
+                    org.springframework.web.bind.annotation.RequestMethod.PATCH,
+                    org.springframework.web.bind.annotation.RequestMethod.DELETE})
     public ResponseEntity<byte[]> proxyRequest(
             HttpMethod method,
             HttpServletRequest request,
@@ -44,16 +60,16 @@ public class GatewayProxyController {
         String query = request.getQueryString();
         String targetBaseUrl;
 
-        if (path.startsWith("/api/v1/merchants")) {
+        if (path.equals("/api/v1/merchants") || path.startsWith("/api/v1/merchants/")) {
             targetBaseUrl = merchantServiceUrl;
-        } else if (path.startsWith("/api/v1/dispatch")) {
+        } else if (path.equals("/api/v1/dispatch") || path.startsWith("/api/v1/dispatch/")) {
             targetBaseUrl = dispatchServiceUrl;
         } else {
             return ResponseEntity.notFound().build();
         }
 
         String targetUrl = targetBaseUrl + path + (query != null ? "?" + query : "");
-        log.debug("Proxying {} {} -> {}", method, path, targetUrl);
+        log.debug("Proxying {} {}", method, path);
 
         try {
             return restClient.method(method)
@@ -84,20 +100,20 @@ public class GatewayProxyController {
                     .headers(errorHeaders)
                     .body(ex.getResponseBodyAsByteArray());
         } catch (Exception ex) {
-            log.error("Proxy error forwarding to {}: {}", targetUrl, ex.getMessage());
+            log.warn("Proxy request failed [method={}, path={}, errorType={}]", method, path,
+                    ex.getClass().getSimpleName());
             return ResponseEntity.status(503)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(("{\"success\":false,\"error\":{\"code\":\"DOWNSTREAM_SERVICE_UNAVAILABLE\",\"message\":\"Downstream service unavailable: "
-                            + ex.getMessage().replace("\"", "\\\"") + "\"}}").getBytes());
+                    .body("{\"success\":false,\"error\":{\"code\":\"DOWNSTREAM_SERVICE_UNAVAILABLE\",\"message\":\"Downstream service unavailable\"}}"
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
     }
 
-    private void copyHeaders(HttpServletRequest request, HttpHeaders headers) {
+    void copyHeaders(HttpServletRequest request, HttpHeaders headers) {
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames != null && headerNames.hasMoreElements()) {
             String name = headerNames.nextElement();
-            if (name.equalsIgnoreCase(HttpHeaders.HOST) ||
-                name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
+            if (name == null || !FORWARDED_REQUEST_HEADERS.contains(name.toLowerCase(java.util.Locale.ROOT))) {
                 continue;
             }
             Enumeration<String> values = request.getHeaders(name);

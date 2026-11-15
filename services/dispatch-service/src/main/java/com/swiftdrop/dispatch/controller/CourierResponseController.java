@@ -30,8 +30,7 @@ public class CourierResponseController {
 
     @GetMapping("/my-jobs")
     public ResponseEntity<ApiResponse<List<DispatchJobSummaryResponse>>> getMyJobs() {
-        UUID courierId = SecurityUtils.getCurrentUserId()
-                .orElseThrow(() -> new IllegalArgumentException("Courier ID is missing from security context or X-User-Id header"));
+        UUID courierId = SecurityUtils.requireMappedActorId();
         List<DispatchJobSummaryResponse> jobs = jobService.getCourierJobs(courierId);
         return ResponseEntity.ok(ApiResponse.success(jobs));
     }
@@ -40,8 +39,7 @@ public class CourierResponseController {
     public ResponseEntity<ApiResponse<DispatchJobResponse>> submitDecision(
             @PathVariable("id") UUID id,
             @Valid @RequestBody CourierOfferDecisionRequest request) {
-        UUID courierId = SecurityUtils.getCurrentUserId()
-                .orElseThrow(() -> new IllegalArgumentException("Courier ID is missing from security context or X-User-Id header"));
+        UUID courierId = SecurityUtils.requireMappedActorId();
         DispatchJobResponse response = jobService.handleCourierDecision(id, courierId, request);
         return ResponseEntity.ok(ApiResponse.success("Decision recorded", response));
     }

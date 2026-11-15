@@ -1,22 +1,21 @@
 package com.swiftdrop.gateway.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ChatbotMessageRequest {
 
     @NotBlank(message = "Message must not be blank")
     @Size(max = 1000, message = "Message must not exceed 1000 characters")
     private String message;
 
-    private String userId;
-
     public ChatbotMessageRequest() {
     }
 
-    public ChatbotMessageRequest(String message, String userId) {
+    public ChatbotMessageRequest(String message) {
         this.message = message;
-        this.userId = userId;
     }
 
     public String getMessage() {
@@ -27,11 +26,4 @@ public class ChatbotMessageRequest {
         this.message = message;
     }
 
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
 }

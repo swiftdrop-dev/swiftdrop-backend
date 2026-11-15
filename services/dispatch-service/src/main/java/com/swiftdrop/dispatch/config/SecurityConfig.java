@@ -1,8 +1,12 @@
 package com.swiftdrop.dispatch.config;
 
-import com.swiftdrop.dispatch.security.HeaderAuthenticationFilter;
+import com.swiftdrop.dispatch.security.JwtAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -16,25 +20,42 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final HeaderAuthenticationFilter headerAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    public SecurityConfig(HeaderAuthenticationFilter headerAuthenticationFilter) {
-        this.headerAuthenticationFilter = headerAuthenticationFilter;
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> disableContainerRegistration() {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
+                    response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                    response.sendError(HttpStatus.UNAUTHORIZED.value());
+                }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers("/error").permitAll()
-                        .requestMatchers("/api/v1/dispatch/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/error").permitAll()
+                        // No trusted service-to-service identity contract exists for projection sync yet.
+                        .requestMatchers("/api/v1/dispatch/projections/**").denyAll()
+                        .requestMatchers("/api/v1/dispatch/admin/**").denyAll()
+                        .requestMatchers("/api/v1/dispatch/courier/**").hasRole("COURIER")
+                        .requestMatchers("/api/v1/dispatch/jobs/**").hasRole("DISPATCHER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/dispatch/zones/**").hasAnyRole("DISPATCHER", "COURIER")
+                        .requestMatchers("/api/v1/dispatch/zones/**").hasRole("DISPATCHER")
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(headerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }
