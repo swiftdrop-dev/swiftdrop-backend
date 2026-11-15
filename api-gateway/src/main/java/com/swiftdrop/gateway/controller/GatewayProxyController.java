@@ -92,12 +92,15 @@ public class GatewayProxyController {
         }
     }
 
-    private void copyHeaders(HttpServletRequest request, HttpHeaders headers) {
+    void copyHeaders(HttpServletRequest request, HttpHeaders headers) {
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames != null && headerNames.hasMoreElements()) {
             String name = headerNames.nextElement();
             if (name.equalsIgnoreCase(HttpHeaders.HOST) ||
-                name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
+                name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH) ||
+                name.equalsIgnoreCase("X-User-Id") ||
+                name.equalsIgnoreCase("X-User-Roles") ||
+                name.equalsIgnoreCase("X-User-Email")) {
                 continue;
             }
             Enumeration<String> values = request.getHeaders(name);
