@@ -106,8 +106,7 @@ public class DispatchJobController {
     public ResponseEntity<ApiResponse<DispatchJobResponse>> manualAssign(
             @PathVariable("id") UUID id,
             @Valid @RequestBody ManualAssignCourierRequest request) {
-        UUID dispatcherId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000002"));
+        UUID dispatcherId = SecurityUtils.requireMappedActorId();
         DispatchJobResponse response = jobService.manualAssignCourier(id, request, dispatcherId);
         return ResponseEntity.ok(ApiResponse.success("Courier offered assignment with 60-second window", response));
     }
@@ -116,8 +115,7 @@ public class DispatchJobController {
     public ResponseEntity<ApiResponse<DispatchJobResponse>> cancelJob(
             @PathVariable("id") UUID id,
             @RequestParam(value = "reason", required = false) String reason) {
-        UUID dispatcherId = SecurityUtils.getCurrentUserId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000002"));
+        UUID dispatcherId = SecurityUtils.requireMappedActorId();
         DispatchJobResponse response = jobService.cancelJob(id, reason, dispatcherId);
         return ResponseEntity.ok(ApiResponse.success("Dispatch job cancelled", response));
     }

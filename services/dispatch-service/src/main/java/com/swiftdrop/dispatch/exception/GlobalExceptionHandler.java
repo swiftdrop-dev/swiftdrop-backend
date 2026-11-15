@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import com.swiftdrop.dispatch.security.IdentityMappingUnavailableException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +18,11 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(IdentityMappingUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIdentityMappingUnavailable(IdentityMappingUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotFound(ResourceNotFoundException ex) {
