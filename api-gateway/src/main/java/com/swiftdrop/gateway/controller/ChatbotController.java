@@ -3,10 +3,13 @@ package com.swiftdrop.gateway.controller;
 import com.swiftdrop.gateway.dto.request.ChatbotMessageRequest;
 import com.swiftdrop.gateway.dto.response.ChatbotMessageResponse;
 import com.swiftdrop.gateway.dto.response.ChatbotUsageResponse;
+import com.swiftdrop.gateway.security.AuthenticatedJwtPrincipal;
 import com.swiftdrop.gateway.service.ChatbotService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,69 +22,40 @@ public class ChatbotController {
         this.chatbotService = chatbotService;
     }
 
-    /**
-     * Send a message to the chatbot.
-     * Enforces the 4-free-message limit per user.
-     */
     @PostMapping("/message")
     public ResponseEntity<ChatbotMessageResponse> sendMessage(
             @Valid @RequestBody ChatbotMessageRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            HttpServletRequest servletRequest
-    ) {
-        String userId = resolveUserId(request.getUserId(), headerUserId, authHeader, servletRequest);
-        ChatbotMessageResponse response = chatbotService.processMessage(userId, request.getMessage());
-        return ResponseEntity.ok(response);
+            Authentication authentication,
+            HttpServletRequest servletRequest) {
+        String quotaKey = authenticatedQuotaKey(authentication);
+        if (quotaKey == null) {
+            String remoteAddress = servletRequest.getRemoteAddr();
+            quotaKey = "remote-ip:" + (remoteAddress == null || remoteAddress.isBlank() ? "unknown" : remoteAddress);
+        }
+        return ResponseEntity.ok(chatbotService.processMessage(quotaKey, request.getMessage()));
     }
 
-    /**
-     * Retrieve the remaining usage count for the current user.
-     */
     @GetMapping("/usage")
-    public ResponseEntity<ChatbotUsageResponse> getUsage(
-            @RequestParam(value = "userId", required = false) String paramUserId,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            HttpServletRequest servletRequest
-    ) {
-        String userId = resolveUserId(paramUserId, headerUserId, authHeader, servletRequest);
-        ChatbotUsageResponse response = chatbotService.getUsage(userId);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<ChatbotUsageResponse> getUsage(Authentication authentication) {
+        String quotaKey = authenticatedQuotaKey(authentication);
+        if (quotaKey == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(chatbotService.getUsage(quotaKey));
     }
 
-    /**
-     * Reset the usage counter for testing or plan upgrade.
-     */
     @PostMapping("/reset")
-    public ResponseEntity<Void> resetUsage(
-            @RequestParam(value = "userId", required = false) String paramUserId,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            HttpServletRequest servletRequest
-    ) {
-        String userId = resolveUserId(paramUserId, headerUserId, authHeader, servletRequest);
-        chatbotService.resetUsage(userId);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> resetUsage() {
+        // Closed until a trusted admin identity contract is available.
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
-    /**
-     * Helper to resolve the user identifier from multiple potential sources.
-     */
-    private String resolveUserId(String bodyOrParamUserId, String headerUserId, String authHeader, HttpServletRequest request) {
-        if (headerUserId != null && !headerUserId.isBlank()) {
-            return headerUserId.trim();
+    private String authenticatedQuotaKey(Authentication authentication) {
+        if (authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof AuthenticatedJwtPrincipal principal) {
+            // The email subject is only an opaque, server-derived quota partition; it is not a domain UUID.
+            return "jwt-subject:" + principal.subject();
         }
-        if (bodyOrParamUserId != null && !bodyOrParamUserId.isBlank()) {
-            return bodyOrParamUserId.trim();
-        }
-        if (authHeader != null && authHeader.startsWith("Bearer ") && authHeader.length() > 7) {
-            String token = authHeader.substring(7).trim();
-            if (!token.isBlank()) {
-                return "token:" + token;
-            }
-        }
-        String remoteAddr = request.getRemoteAddr();
-        return (remoteAddr != null && !remoteAddr.isBlank()) ? "ip:" + remoteAddr : "anonymous";
+        return null;
     }
 }

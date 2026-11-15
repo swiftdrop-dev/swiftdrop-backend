@@ -78,6 +78,30 @@ class JwtTokenValidatorTest {
     }
 
     @Test
+    void rejectsTokenMissingIssuedAt() {
+        String noIssuedAt = Jwts.builder()
+                .subject("customer@example.test")
+                .claim("role", "customer")
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(key(SECRET))
+                .compact();
+        assertInvalid(noIssuedAt);
+    }
+
+    @Test
+    void rejectsIssuedAtInTheFuture() {
+        Instant now = Instant.now();
+        String futureIssuedAt = Jwts.builder()
+                .subject("customer@example.test")
+                .claim("role", "customer")
+                .issuedAt(Date.from(now.plusSeconds(60)))
+                .expiration(Date.from(now.plusSeconds(120)))
+                .signWith(key(SECRET))
+                .compact();
+        assertInvalid(futureIssuedAt);
+    }
+
+    @Test
     void rejectsSubjectWithUnexpectedClaimType() {
         assertInvalid(signedRawClaims("{\"sub\":12345,\"role\":\"customer\",\"iat\":1700000000,\"exp\":4102444800}", key(SECRET)));
     }

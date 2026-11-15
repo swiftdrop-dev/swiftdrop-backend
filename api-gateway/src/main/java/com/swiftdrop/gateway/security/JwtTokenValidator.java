@@ -6,6 +6,7 @@ import io.jsonwebtoken.security.Keys;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Date;
 import java.util.Set;
 
@@ -38,13 +39,16 @@ public final class JwtTokenValidator {
             Object roleClaim = claims.get("role");
             Date issuedAt = claims.getIssuedAt();
             Date expiration = claims.getExpiration();
+            Date now = Date.from(Instant.now());
 
             if (subject == null || subject.isBlank()
                     || !(roleClaim instanceof String role)
                     || !ALLOWED_ROLES.contains(role)
                     || issuedAt == null
+                    || issuedAt.after(now)
                     || expiration == null
-                    || !expiration.after(new Date())) {
+                    || !expiration.after(now)
+                    || !expiration.after(issuedAt)) {
                 throw new IllegalArgumentException("JWT claims are invalid");
             }
 
