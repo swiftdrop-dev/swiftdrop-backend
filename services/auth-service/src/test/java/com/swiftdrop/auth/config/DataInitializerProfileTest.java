@@ -42,7 +42,7 @@ class DataInitializerProfileTest {
             context.refresh();
 
             context.getBean(CommandLineRunner.class).run();
-            verify(repository, times(4)).save(any(User.class));
+            verify(repository, times(5)).save(any(User.class));
         }
     }
 
