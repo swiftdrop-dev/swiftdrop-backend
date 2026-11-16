@@ -46,7 +46,7 @@ public class AuthService {
         userRepository.save(user);
 
         // 4. Generate JWT and return response
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
         return buildAuthResponse(token, user);
     }
 
@@ -64,7 +64,7 @@ public class AuthService {
         }
 
         // 3. Generate JWT and return response
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
         return buildAuthResponse(token, user);
     }
 
