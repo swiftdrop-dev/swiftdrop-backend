@@ -6,17 +6,22 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
-/** Authenticated Auth Service identity. It intentionally contains no user, courier or dispatcher UUID. */
+/** Authenticated identity holding canonical user UUID, email, and normalized role. */
 public final class UserPrincipal implements UserDetails {
 
+    private final UUID id;
     private final String email;
     private final String role;
 
-    public UserPrincipal(String email, String role) {
+    public UserPrincipal(UUID id, String email, String role) {
+        this.id = id;
         this.email = email;
         this.role = role;
     }
+
+    public UUID getId() { return id; }
 
     public String getEmail() { return email; }
 
@@ -28,7 +33,7 @@ public final class UserPrincipal implements UserDetails {
     }
 
     @Override public String getPassword() { return ""; }
-    @Override public String getUsername() { return email; }
+    @Override public String getUsername() { return email != null ? email : (id != null ? id.toString() : ""); }
     @Override public boolean isAccountNonExpired() { return true; }
     @Override public boolean isAccountNonLocked() { return true; }
     @Override public boolean isCredentialsNonExpired() { return true; }
