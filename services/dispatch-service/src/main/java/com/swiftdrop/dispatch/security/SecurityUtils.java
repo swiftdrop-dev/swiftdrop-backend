@@ -16,8 +16,12 @@ public final class SecurityUtils {
         throw new IdentityMappingUnavailableException();
     }
 
-    /** The JWT identifies the user by email only; no authoritative UUID mapping is implemented. */
+    /** Returns the authenticated user/dispatcher/courier UUID, or fails closed if unmapped. */
     public static java.util.UUID requireMappedActorId() {
-        throw new IdentityMappingUnavailableException();
+        UserPrincipal principal = requirePrincipal();
+        if (principal.getId() == null) {
+            throw new IdentityMappingUnavailableException();
+        }
+        return principal.getId();
     }
 }
