@@ -31,16 +31,27 @@ public class JwtUtil {
         this.expirationMs = expirationMs;
     }
 
+    public static final String ISSUER = "swiftdrop-auth-service";
+
     // ── Token Generation ─────────────────────────────────────
 
-    public String generateToken(String email, String role) {
+    public String generateToken(String userId, String email, String role) {
+        Date now = new Date();
         return Jwts.builder()
-                .subject(email)
-                .claim("role", role)
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .issuer(ISSUER)
+                .subject(userId)
+                .claim("userId", userId)
+                .claim("email", email)
+                .claim("role", role != null ? role.trim().toLowerCase() : "")
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + expirationMs))
                 .signWith(signingKey)
                 .compact();
+    }
+
+    @Deprecated
+    public String generateToken(String email, String role) {
+        return generateToken(email, email, role);
     }
 
     // ── Token Validation ─────────────────────────────────────
@@ -56,8 +67,18 @@ public class JwtUtil {
 
     // ── Claim Extraction ─────────────────────────────────────
 
+    public String extractUserId(String token) {
+        return extractClaim(token, claims -> {
+            String userId = claims.get("userId", String.class);
+            return userId != null ? userId : claims.getSubject();
+        });
+    }
+
     public String extractEmail(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, claims -> {
+            String email = claims.get("email", String.class);
+            return email != null ? email : claims.getSubject();
+        });
     }
 
     public String extractRole(String token) {
