@@ -53,6 +53,20 @@ class GatewayProxyControllerTest {
     }
 
     @Test
+    void shouldHandleParcelProxyRouteWhenDownstreamOffline() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/SWF-12345")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void shouldHandleCourierProxyRouteWhenDownstreamOffline() throws Exception {
+        mockMvc.perform(get("/api/v1/couriers/cou_001")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
     void invalidBearerTokenIsRejectedBeforeProxying() throws Exception {
         mockMvc.perform(get("/api/v1/merchants/onboarding/test-id")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
