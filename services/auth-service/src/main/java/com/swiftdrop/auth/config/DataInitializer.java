@@ -20,6 +20,7 @@ public class DataInitializer {
             seedOrUpdateUser(userRepository, passwordEncoder, "merchant@demo.com", "Lanka Traders", "demo1234", "011-5678900", Role.merchant);
             seedOrUpdateUser(userRepository, passwordEncoder, "courier@demo.com", "Nimal Senanayake", "demo1234", "076-9876543", Role.courier);
             seedOrUpdateUser(userRepository, passwordEncoder, "dispatcher@demo.com", "Saman Kumarasinghe", "demo1234", "011-2345678", Role.dispatcher);
+            seedOrUpdateUser(userRepository, passwordEncoder, "admin@demo.com", "System Admin", "demo1234", "011-0000000", Role.admin);
         };
     }
 

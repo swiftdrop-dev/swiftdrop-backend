@@ -56,8 +56,16 @@ class JwtTokenValidatorTest {
     }
 
     @Test
+    void acceptsAdminRole() {
+        AuthenticatedJwtPrincipal principal = validator.validate(token("admin@example.test", "admin",
+                Instant.now().plusSeconds(300), key(SECRET)));
+        assertEquals("admin@example.test", principal.getName());
+        assertEquals("admin", principal.role());
+    }
+
+    @Test
     void rejectsRoleOutsideAuthServiceRoleSet() {
-        assertInvalid(token("customer@example.test", "admin", Instant.now().plusSeconds(300), key(SECRET)));
+        assertInvalid(token("customer@example.test", "superadmin", Instant.now().plusSeconds(300), key(SECRET)));
     }
 
     @Test

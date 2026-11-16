@@ -40,14 +40,13 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
-                        // Auth Service has no admin role in its current JWT contract.
-                        .requestMatchers("/api/v1/merchants/admin/**").denyAll()
+                        .requestMatchers("/api/v1/merchants/admin/**").hasRole("ADMIN")
                         // Account creation can be submitted by authenticated customer or merchant accounts.
                         .requestMatchers(HttpMethod.POST, "/api/v1/merchants/onboarding/register")
                         .hasAnyRole("CUSTOMER", "MERCHANT")
                         .requestMatchers("/api/v1/merchants/onboarding/me").hasRole("MERCHANT")
-                        .requestMatchers("/api/v1/merchants/onboarding/**").hasRole("MERCHANT")
-                        .requestMatchers("/api/v1/merchants/*/credentials/**").hasRole("MERCHANT")
+                        .requestMatchers("/api/v1/merchants/onboarding/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
                         // Other endpoints have no approved public or ownership policy yet.
                         .requestMatchers("/api/v1/merchants/**").denyAll()
                         .anyRequest().authenticated()

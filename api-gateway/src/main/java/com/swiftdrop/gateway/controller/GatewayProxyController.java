@@ -36,16 +36,19 @@ public class GatewayProxyController {
     private final RestClient restClient;
     private final String merchantServiceUrl;
     private final String dispatchServiceUrl;
+    private final String authServiceUrl;
 
     public GatewayProxyController(
             @Value("${services.merchant.url:http://localhost:8084}") String merchantServiceUrl,
-            @Value("${services.dispatch.url:http://localhost:8085}") String dispatchServiceUrl) {
+            @Value("${services.dispatch.url:http://localhost:8085}") String dispatchServiceUrl,
+            @Value("${services.auth.url:http://localhost:8081}") String authServiceUrl) {
         this.restClient = RestClient.builder().build();
         this.merchantServiceUrl = merchantServiceUrl;
         this.dispatchServiceUrl = dispatchServiceUrl;
+        this.authServiceUrl = authServiceUrl;
     }
 
-    @RequestMapping(value = {"/api/v1/merchants/**", "/api/v1/dispatch/**"},
+    @RequestMapping(value = {"/api/v1/merchants/**", "/api/v1/dispatch/**", "/api/v1/auth/**"},
             method = {org.springframework.web.bind.annotation.RequestMethod.GET,
                     org.springframework.web.bind.annotation.RequestMethod.POST,
                     org.springframework.web.bind.annotation.RequestMethod.PUT,
@@ -64,6 +67,8 @@ public class GatewayProxyController {
             targetBaseUrl = merchantServiceUrl;
         } else if (path.equals("/api/v1/dispatch") || path.startsWith("/api/v1/dispatch/")) {
             targetBaseUrl = dispatchServiceUrl;
+        } else if (path.equals("/api/v1/auth") || path.startsWith("/api/v1/auth/")) {
+            targetBaseUrl = authServiceUrl;
         } else {
             return ResponseEntity.notFound().build();
         }

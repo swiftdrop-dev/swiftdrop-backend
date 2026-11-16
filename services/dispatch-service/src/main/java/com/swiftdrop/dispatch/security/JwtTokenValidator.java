@@ -9,11 +9,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Set;
+import java.util.UUID;
 
-/** Validates the Auth Service contract: sub=email, role, iat and exp. */
+/** Validates the Auth Service contract with user UUID identity and allowed roles. */
 public final class JwtTokenValidator {
 
-    private static final Set<String> ALLOWED_ROLES = Set.of("customer", "merchant", "courier", "dispatcher");
+    private static final Set<String> ALLOWED_ROLES = Set.of("customer", "merchant", "courier", "dispatcher", "admin");
     private final SecretKey verificationKey;
 
     public JwtTokenValidator(String secret) {
@@ -48,7 +49,26 @@ public final class JwtTokenValidator {
                     || !expiration.after(issuedAt)) {
                 throw new IllegalArgumentException("Invalid JWT claims");
             }
-            return new UserPrincipal(subject, role);
+
+            UUID userId = null;
+            String userIdClaim = claims.get("userId", String.class);
+            if (userIdClaim != null) {
+                try {
+                    userId = UUID.fromString(userIdClaim);
+                } catch (IllegalArgumentException ignored) { }
+            }
+            if (userId == null && subject != null) {
+                try {
+                    userId = UUID.fromString(subject);
+                } catch (IllegalArgumentException ignored) { }
+            }
+
+            String email = claims.get("email", String.class);
+            if (email == null) {
+                email = subject;
+            }
+
+            return new UserPrincipal(userId, email, role);
         } catch (RuntimeException exception) {
             // Never propagate parser details or token content to callers.
             throw new JwtTokenValidationException();

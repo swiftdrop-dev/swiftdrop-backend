@@ -48,11 +48,11 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/error").permitAll()
                         // No trusted service-to-service identity contract exists for projection sync yet.
                         .requestMatchers("/api/v1/dispatch/projections/**").denyAll()
-                        .requestMatchers("/api/v1/dispatch/admin/**").denyAll()
+                        .requestMatchers("/api/v1/dispatch/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/dispatch/courier/**").hasRole("COURIER")
-                        .requestMatchers("/api/v1/dispatch/jobs/**").hasRole("DISPATCHER")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/dispatch/zones/**").hasAnyRole("DISPATCHER", "COURIER")
-                        .requestMatchers("/api/v1/dispatch/zones/**").hasRole("DISPATCHER")
+                        .requestMatchers("/api/v1/dispatch/jobs/**").hasAnyRole("DISPATCHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/dispatch/zones/**").hasAnyRole("DISPATCHER", "COURIER", "ADMIN")
+                        .requestMatchers("/api/v1/dispatch/zones/**").hasAnyRole("DISPATCHER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

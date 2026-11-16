@@ -4,7 +4,8 @@ public enum Role {
     customer,
     merchant,
     courier,
-    dispatcher;
+    dispatcher,
+    admin;
 
     public static Role fromString(String value) {
         if (value == null) return null;

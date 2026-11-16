@@ -80,6 +80,9 @@ class DispatchJwtSecurityIntegrationTest {
         mockMvc.perform(get("/api/v1/dispatch/jobs/summary")
                         .header(HttpHeaders.AUTHORIZATION, bearer("dispatcher", Instant.now().plusSeconds(300))))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/dispatch/jobs/summary")
+                        .header(HttpHeaders.AUTHORIZATION, bearer("admin", Instant.now().plusSeconds(300))))
+                .andExpect(status().isOk());
     }
 
     @Test

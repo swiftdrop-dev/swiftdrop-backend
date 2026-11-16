@@ -47,7 +47,14 @@ class JwtTokenValidatorTest {
         assertInvalid(Jwts.builder().subject("x@example.test").issuedAt(new Date()).expiration(Date.from(Instant.now().plusSeconds(60))).signWith(key(SECRET)).compact());
         assertInvalid(Jwts.builder().subject("x@example.test").claim("role", "courier").expiration(Date.from(Instant.now().plusSeconds(60))).signWith(key(SECRET)).compact());
         assertInvalid(token(SECRET, "COURIER", "x@example.test", Instant.now().minusSeconds(1), Instant.now().plusSeconds(60)));
-        assertInvalid(token(SECRET, "admin", "x@example.test", Instant.now().minusSeconds(1), Instant.now().plusSeconds(60)));
+        assertInvalid(token(SECRET, "superadmin", "x@example.test", Instant.now().minusSeconds(1), Instant.now().plusSeconds(60)));
+    }
+
+    @Test
+    void acceptsAdminRole() {
+        UserPrincipal principal = validator.validate(token(SECRET, "admin", "admin@example.test", Instant.now().minusSeconds(2), Instant.now().plusSeconds(300)));
+        assertThat(principal.getEmail()).isEqualTo("admin@example.test");
+        assertThat(principal.getAuthorities()).extracting("authority").containsExactly("ROLE_ADMIN");
     }
 
     @Test

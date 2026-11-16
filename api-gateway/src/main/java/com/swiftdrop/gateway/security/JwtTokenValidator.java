@@ -13,7 +13,7 @@ import java.util.Set;
 /** Validates the existing Auth Service HS-signed JWT contract. */
 public final class JwtTokenValidator {
 
-    private static final Set<String> ALLOWED_ROLES = Set.of("customer", "merchant", "courier", "dispatcher");
+    private static final Set<String> ALLOWED_ROLES = Set.of("customer", "merchant", "courier", "dispatcher", "admin");
     private final SecretKey verificationKey;
 
     public JwtTokenValidator(String secret) {
