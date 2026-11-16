@@ -35,6 +35,24 @@ class GatewayProxyControllerTest {
     }
 
     @Test
+    void shouldHandleAuthLoginProxyRouteWhenDownstreamOffline() throws Exception {
+        // When downstream auth-service is offline, gateway should return 503 DOWNSTREAM_SERVICE_UNAVAILABLE
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.test\",\"password\":\"secret123\"}"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void shouldHandleAuthRegisterProxyRouteWhenDownstreamOffline() throws Exception {
+        // When downstream auth-service is offline, gateway should return 503 DOWNSTREAM_SERVICE_UNAVAILABLE
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Test User\",\"email\":\"user@example.test\",\"password\":\"secret123\"}"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
     void invalidBearerTokenIsRejectedBeforeProxying() throws Exception {
         mockMvc.perform(get("/api/v1/merchants/onboarding/test-id")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
