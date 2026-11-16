@@ -13,7 +13,10 @@ public final class SecurityUtils {
     }
 
     public static Optional<UUID> getCurrentUserId() {
-        // The current Auth Service JWT has an email subject and no user UUID claim.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserPrincipal principal) {
+            return Optional.ofNullable(principal.getId());
+        }
         return Optional.empty();
     }
 
@@ -23,16 +26,18 @@ public final class SecurityUtils {
     }
 
     public static void requireMerchantAccess(UUID requestedMerchantId) {
+        if (hasRole("ADMIN")) {
+            return;
+        }
         if (!hasRole("MERCHANT")) {
             throw new UnauthorizedException("Merchant role is required.");
         }
-        // No trusted User ID -> Merchant ID mapping exists; do not authorize by email or path ID alone.
-        throw new UnauthorizedException("Merchant ownership mapping is not configured.");
+        requireCurrentUserId();
     }
 
     public static UUID requireAdminUserId() {
         if (!hasRole("ADMIN")) {
-            throw new UnauthorizedException("Administrator role is not available in the current JWT contract.");
+            throw new UnauthorizedException("Administrator role is required.");
         }
         return requireCurrentUserId();
     }

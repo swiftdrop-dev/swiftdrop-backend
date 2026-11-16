@@ -104,10 +104,17 @@ class MerchantJwtSecurityIntegrationTest {
     }
 
     @Test
-    void adminEndpointsAreDeniedBecauseAuthContractHasNoAdminRole() throws Exception {
+    void adminEndpointsAreDeniedForNonAdminRoles() throws Exception {
         mockMvc.perform(get("/api/v1/merchants/admin/pending")
                         .header(HttpHeaders.AUTHORIZATION, bearer("dispatcher@example.test", "dispatcher", 120)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminEndpointsAllowAdminRole() throws Exception {
+        mockMvc.perform(get("/api/v1/merchants/admin/pending")
+                        .header(HttpHeaders.AUTHORIZATION, bearer("admin@example.test", "admin", 120)))
+                .andExpect(status().isOk());
     }
 
     @Test
