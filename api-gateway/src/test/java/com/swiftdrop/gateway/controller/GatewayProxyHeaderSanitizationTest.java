@@ -11,7 +11,8 @@ class GatewayProxyHeaderSanitizationTest {
 
     @Test
     void stripsCallerSuppliedIdentityHeadersButPreservesBearerToken() {
-        GatewayProxyController controller = new GatewayProxyController("http://merchant.test", "http://dispatch.test", "http://auth.test");
+        GatewayProxyController controller = new GatewayProxyController(
+                "http://merchant.test", "http://dispatch.test", "http://auth.test", "http://parcel.test", "http://courier.test");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test-token");
         request.addHeader("X-User-Id", "attacker-id");
