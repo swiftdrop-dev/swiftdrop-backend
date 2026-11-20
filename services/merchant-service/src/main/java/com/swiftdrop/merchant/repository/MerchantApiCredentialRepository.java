@@ -1,10 +1,21 @@
 package com.swiftdrop.merchant.repository;
+
 import com.swiftdrop.merchant.entity.MerchantApiCredential;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.domain.*;
-import java.util.*;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
 public interface MerchantApiCredentialRepository extends JpaRepository<MerchantApiCredential, UUID> {
-    Optional<MerchantApiCredential> findByIdAndMerchantId(UUID id, UUID merchantId);
-    Optional<MerchantApiCredential> findByPublicId(String publicId);
-    Page<MerchantApiCredential> findByMerchantId(UUID merchantId, Pageable pageable);
+
+    List<MerchantApiCredential> findByMerchantId(UUID merchantId);
+
+    List<MerchantApiCredential> findByMerchantIdAndIsActiveTrue(UUID merchantId);
+
+    Optional<MerchantApiCredential> findByKeyPrefixAndIsActiveTrue(String keyPrefix);
+
+    Optional<MerchantApiCredential> findByKeyHash(String keyHash);
 }

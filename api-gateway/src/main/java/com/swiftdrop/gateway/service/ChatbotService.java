@@ -6,18 +6,17 @@ import com.swiftdrop.gateway.dto.response.ChatbotUsageResponse;
 public interface ChatbotService {
 
     /**
-     * Process an incoming chatbot message for a specific user,
-     * enforcing the message rate limit.
+     * Process a message under a quota key derived by the server, enforcing the local message limit.
      */
-    ChatbotMessageResponse processMessage(String userId, String userMessage);
+    ChatbotMessageResponse processMessage(String quotaKey, String userMessage);
 
     /**
      * Retrieve current usage statistics for a user.
      */
-    ChatbotUsageResponse getUsage(String userId);
+    ChatbotUsageResponse getUsage(String quotaKey);
 
     /**
      * Reset the usage counter for a user (useful for testing or upgrades).
      */
-    void resetUsage(String userId);
+    void resetUsage(String quotaKey);
 }

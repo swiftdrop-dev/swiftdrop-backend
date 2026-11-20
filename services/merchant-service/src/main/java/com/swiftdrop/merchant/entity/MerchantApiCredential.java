@@ -1,54 +1,198 @@
 package com.swiftdrop.merchant.entity;
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import jakarta.persistence.*;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+
 import java.time.Instant;
-import java.util.*;
+import java.util.UUID;
 
 @Entity
-@Table(name="merchant_api_credentials")
-@JsonAutoDetect(fieldVisibility=JsonAutoDetect.Visibility.NONE, getterVisibility=JsonAutoDetect.Visibility.NONE,
-    isGetterVisibility=JsonAutoDetect.Visibility.NONE)
+@Table(name = "merchant_api_credentials")
 public class MerchantApiCredential {
-    @Id private UUID id;
-    @Column(name="merchant_id", nullable=false, updatable=false) private UUID merchantId;
-    @Column(name="public_id", nullable=false, unique=true, length=22, updatable=false) private String publicId;
-    @Column(name="secret_digest", nullable=false, length=64, updatable=false) private String secretDigest;
-    @Column(name="hash_version", nullable=false, length=20, updatable=false) private String hashVersion;
-    @Column(nullable=false, length=100) private String name;
-    @ElementCollection(fetch=FetchType.EAGER)
-    @CollectionTable(name="merchant_api_credential_scopes", joinColumns=@JoinColumn(name="credential_id"))
-    @Column(name="scope", nullable=false, length=40) private Set<String> scopes;
-    @Column(name="created_by", nullable=false, length=255, updatable=false) private String createdBy;
-    @Column(name="created_at", nullable=false, updatable=false) private Instant createdAt;
-    @Column(name="expires_at", nullable=false, updatable=false) private Instant expiresAt;
-    @Column(name="revoked_at") private Instant revokedAt;
-    @Column(name="revoked_by", length=255) private String revokedBy;
-    @Column(name="revocation_reason", length=40) private String revocationReason;
-    @Column(name="replacement_id", unique=true) private UUID replacementId;
-    @Version private Long version;
-    protected MerchantApiCredential() {}
-    public MerchantApiCredential(UUID merchantId, String publicId, String digest, String hashVersion,
-        String name, Set<String> scopes, String actor, Instant now, Instant expiresAt) {
-        this.id=UUID.randomUUID(); this.merchantId=merchantId; this.publicId=publicId;
-        this.secretDigest=digest; this.hashVersion=hashVersion; this.name=name; this.scopes=new HashSet<>(scopes);
-        this.createdBy=actor; this.createdAt=now; this.expiresAt=expiresAt;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "merchant_id", nullable = false)
+    private Merchant merchant;
+
+    @Column(name = "key_prefix", nullable = false, length = 16)
+    private String keyPrefix;
+
+    @Column(name = "key_hash", nullable = false, unique = true, length = 255)
+    private String keyHash;
+
+    @Column(name = "environment", nullable = false, length = 20)
+    private String environment = "PRODUCTION";
+
+    @Column(name = "label", nullable = false, length = 100)
+    private String label = "Default API Key";
+
+    @Column(name = "scopes", nullable = false, length = 255)
+    private String scopes = "parcels:create,parcels:read,tracking:read";
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "last_used_at")
+    private Instant lastUsedAt;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    @Column(name = "revoked_by")
+    private UUID revokedBy;
+
+    @Column(name = "revocation_reason", length = 255)
+    private String revocationReason;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    public MerchantApiCredential() {
     }
-    public void revoke(Instant now, String actor, String reason, UUID replacement) {
-        if (revokedAt != null) return;
-        revokedAt=now; revokedBy=actor; revocationReason=reason; replacementId=replacement;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
+        }
+        if (this.environment == null) {
+            this.environment = "PRODUCTION";
+        }
+        if (this.label == null) {
+            this.label = "Default API Key";
+        }
+        if (this.scopes == null) {
+            this.scopes = "parcels:create,parcels:read,tracking:read";
+        }
+        if (this.isActive == null) {
+            this.isActive = true;
+        }
     }
-    public boolean activeAt(Instant now) { return revokedAt == null && now.isBefore(expiresAt); }
-    public String stateAt(Instant now) { return revokedAt != null ? "REVOKED" : now.isBefore(expiresAt) ? "ACTIVE" : "EXPIRED"; }
-    public UUID getId() { return id; }
-    public UUID getMerchantId() { return merchantId; }
-    public String getPublicId() { return publicId; }
-    public String getName() { return name; }
-    public Set<String> getScopes() { return Set.copyOf(scopes); }
-    public String getSecretDigest() { return secretDigest; }
-    public String getHashVersion() { return hashVersion; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getExpiresAt() { return expiresAt; }
-    public Instant getRevokedAt() { return revokedAt; }
-    public UUID getReplacementId() { return replacementId; }
-    @Override public String toString() { return "MerchantApiCredential[REDACTED]"; }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    public Merchant getMerchant() {
+        return merchant;
+    }
+
+    public void setMerchant(Merchant merchant) {
+        this.merchant = merchant;
+    }
+
+    public String getKeyPrefix() {
+        return keyPrefix;
+    }
+
+    public void setKeyPrefix(String keyPrefix) {
+        this.keyPrefix = keyPrefix;
+    }
+
+    public String getKeyHash() {
+        return keyHash;
+    }
+
+    public void setKeyHash(String keyHash) {
+        this.keyHash = keyHash;
+    }
+
+    public String getEnvironment() {
+        return environment;
+    }
+
+    public void setEnvironment(String environment) {
+        this.environment = environment;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public String getScopes() {
+        return scopes;
+    }
+
+    public void setScopes(String scopes) {
+        this.scopes = scopes;
+    }
+
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(Instant expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public Instant getLastUsedAt() {
+        return lastUsedAt;
+    }
+
+    public void setLastUsedAt(Instant lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
+    }
+
+    public Instant getRevokedAt() {
+        return revokedAt;
+    }
+
+    public void setRevokedAt(Instant revokedAt) {
+        this.revokedAt = revokedAt;
+    }
+
+    public UUID getRevokedBy() {
+        return revokedBy;
+    }
+
+    public void setRevokedBy(UUID revokedBy) {
+        this.revokedBy = revokedBy;
+    }
+
+    public String getRevocationReason() {
+        return revocationReason;
+    }
+
+    public void setRevocationReason(String revocationReason) {
+        this.revocationReason = revocationReason;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
 }

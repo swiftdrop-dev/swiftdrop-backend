@@ -47,24 +47,20 @@ public class GeminiService {
      * @param userMessage     The prompt typed by the user.
      * @return Generated reply or empty if unconfigured / error.
      */
-    public Optional<String> generateResponse(String databaseContext, String userMessage) {
+    public Optional<String> generateResponse(String userMessage) {
         if (!isConfigured()) {
             logger.debug("Gemini API key is not configured, skipping external LLM call.");
             return Optional.empty();
         }
 
         try {
-            String endpoint = String.format("%s/%s:generateContent?key=%s", apiUrl, model, apiKey.trim());
+            String endpoint = String.format("%s/%s:generateContent", apiUrl, model);
 
-            String systemPrompt = "You are 'SwiftBot', the official intelligent AI customer assistant for SwiftDrop Courier & Delivery Platform in Sri Lanka.\n"
-                    + "Your mission is to help customers, merchants, couriers, and dispatchers with their parcels, tracking, bookings, rates, and courier operations.\n\n"
-                    + "CRITICAL INSTRUCTIONS:\n"
-                    + "1. ALWAYS refer to the LIVE DATABASE CONTEXT provided below to answer parcel status, tracking numbers, couriers, or user questions accurately.\n"
-                    + "2. If the user asks about 'my parcels' or 'where is my parcel', look at the CURRENT LOGGED-IN USER PARCELS section in the context.\n"
-                    + "3. If a tracking number is mentioned (e.g. SWF-2024-xxxx), give clear details on current status, estimated delivery, courier, and destination.\n"
-                    + "4. Respond politely, professionally, and clearly. You can understand and respond in English or friendly Sinhala/Singlish depending on user's language.\n"
-                    + "5. If information is not in the database, clearly state so without hallucinating fake tracking details.\n\n"
-                    + databaseContext;
+            String systemPrompt = "You are SwiftBot, a general information assistant for SwiftDrop in Sri Lanka. "
+                    + "Answer general questions about delivery services, booking, rates, and support. "
+                    + "You do not have access to parcel records, recipient information, courier identity, or account data. "
+                    + "For parcel-specific information, direct the user to the authenticated tracking or shipment view. "
+                    + "Do not claim to have checked live records. Reply politely and clearly.";
 
             // Construct Gemini Request Body
             Map<String, Object> requestPayload = new LinkedHashMap<>();
@@ -87,6 +83,7 @@ public class GeminiService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", apiKey.trim());
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestPayload, headers);
 
@@ -108,7 +105,8 @@ public class GeminiService {
                 }
             }
         } catch (Exception e) {
-            logger.warn("Gemini API call failed: {}. Falling back to domain rule engine.", e.getMessage());
+            logger.warn("Gemini API call failed; using the local response engine [errorType={}]",
+                    e.getClass().getSimpleName());
         }
 
         return Optional.empty();
