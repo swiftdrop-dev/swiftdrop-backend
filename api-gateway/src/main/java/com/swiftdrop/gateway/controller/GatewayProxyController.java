@@ -11,10 +11,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Enumeration;
 import java.util.Set;
 
@@ -40,18 +44,36 @@ public class GatewayProxyController {
     private final String parcelServiceUrl;
     private final String courierServiceUrl;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public GatewayProxyController(
             @Value("${services.merchant.url:http://localhost:8084}") String merchantServiceUrl,
             @Value("${services.dispatch.url:http://localhost:8085}") String dispatchServiceUrl,
             @Value("${services.auth.url:http://localhost:8081}") String authServiceUrl,
             @Value("${services.parcel.url:http://localhost:8082}") String parcelServiceUrl,
             @Value("${services.courier.url:http://localhost:8086}") String courierServiceUrl) {
-        this.restClient = RestClient.builder().build();
+        this(merchantServiceUrl, dispatchServiceUrl, authServiceUrl, parcelServiceUrl, courierServiceUrl, defaultRestClient());
+    }
+
+    GatewayProxyController(
+            String merchantServiceUrl,
+            String dispatchServiceUrl,
+            String authServiceUrl,
+            String parcelServiceUrl,
+            String courierServiceUrl,
+            RestClient restClient) {
+        this.restClient = restClient;
         this.merchantServiceUrl = merchantServiceUrl;
         this.dispatchServiceUrl = dispatchServiceUrl;
         this.authServiceUrl = authServiceUrl;
         this.parcelServiceUrl = parcelServiceUrl;
         this.courierServiceUrl = courierServiceUrl;
+    }
+
+    private static RestClient defaultRestClient() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) Duration.ofSeconds(5).toMillis());
+        factory.setReadTimeout((int) Duration.ofSeconds(10).toMillis());
+        return RestClient.builder().requestFactory(factory).build();
     }
 
     @RequestMapping(value = {
@@ -120,6 +142,17 @@ public class GatewayProxyController {
             return ResponseEntity.status(ex.getStatusCode())
                     .headers(errorHeaders)
                     .body(ex.getResponseBodyAsByteArray());
+        } catch (ResourceAccessException ex) {
+            boolean isTimeout = ex.getCause() instanceof SocketTimeoutException
+                    || (ex.getMessage() != null && ex.getMessage().toLowerCase(java.util.Locale.ROOT).contains("timeout"));
+            int status = isTimeout ? 504 : 503;
+            String code = isTimeout ? "GATEWAY_TIMEOUT" : "DOWNSTREAM_SERVICE_UNAVAILABLE";
+            String msg = isTimeout ? "Downstream service timed out" : "Downstream service unavailable";
+            log.warn("Downstream communication failure [method={}, path={}, status={}, code={}]", method, path, status, code);
+            return ResponseEntity.status(status)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(("{\"success\":false,\"error\":{\"code\":\"" + code + "\",\"message\":\"" + msg + "\"}}")
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (Exception ex) {
             log.warn("Proxy request failed [method={}, path={}, errorType={}]", method, path,
                     ex.getClass().getSimpleName());
