@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: Proposed M2 internal parcel contract (not implemented by M2)
+  version: 0.1.0
+  description: Requires approved service authentication. Merchant key is never forwarded. M2 must enforce merchant ownership, durable request-ID deduplication and reconciliation before live creation.
+paths:
+  /internal/v1/merchants/{merchantId}/parcels:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      summary: Create or replay canonical parcel
+      description: Atomically deduplicate merchant/request ID with payload fingerprint. 400/409/422 must guarantee no parcel was created. Duplicate successful requests replay canonical data. No such guarantee is assumed until M2 approves it.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order: {$ref: './merchant-orders.openapi.yaml#/components/schemas/CreateOrder'}
+      responses:
+        '201':
+          $ref: '#/components/responses/Parcel'
+        default:
+          description: Sanitized by merchant-service; raw body is never exposed
+    get:
+      summary: List parcels scoped to merchant
+      description: Accept page/size/status/merchantOrderRef/trackingNumber/createdFrom/createdTo from public contract and sort=createdAt,desc;id,desc. M2 must apply filters and ownership before pagination.
+      responses:
+        '200':
+          description: Owned canonical page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data,total,page,size]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Parcel'}
+                  total: {type: integer, format: int64}
+                  page: {type: integer}
+                  size: {type: integer}
+  /internal/v1/merchants/{merchantId}/parcels/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Owned canonical detail
+      responses:
+        '200': {$ref: '#/components/responses/Parcel'}
+        '404':
+          description: Missing or owned by another merchant
+components:
+  parameters:
+    MerchantId:
+      in: path
+      name: merchantId
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    Parcel:
+      type: object
+      required: [merchantId,order]
+      properties:
+        merchantId: {type: string, format: uuid}
+        order: {$ref: './merchant-orders.openapi.yaml#/components/schemas/Order'}
+  responses:
+    Parcel:
+      description: Canonical parcel with explicit ownership
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Parcel'}
