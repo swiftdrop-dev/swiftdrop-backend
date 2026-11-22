@@ -73,4 +73,26 @@ class GatewayProxyControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void shouldReturnGatewayTimeoutWhenDownstreamTimesOut() {
+        org.springframework.web.client.RestClient mockRestClient = org.mockito.Mockito.mock(org.springframework.web.client.RestClient.class);
+        org.springframework.web.client.RestClient.RequestBodyUriSpec uriSpec = org.mockito.Mockito.mock(org.springframework.web.client.RestClient.RequestBodyUriSpec.class);
+        org.mockito.Mockito.when(mockRestClient.method(org.springframework.http.HttpMethod.GET)).thenReturn(uriSpec);
+        org.mockito.Mockito.when(uriSpec.uri(org.mockito.ArgumentMatchers.any(java.net.URI.class))).thenReturn(uriSpec);
+        org.mockito.Mockito.when(uriSpec.headers(org.mockito.ArgumentMatchers.any())).thenReturn(uriSpec);
+        org.mockito.Mockito.when(uriSpec.body(org.mockito.ArgumentMatchers.any(byte[].class))).thenReturn(uriSpec);
+        org.mockito.Mockito.when(uriSpec.exchange(org.mockito.ArgumentMatchers.any())).thenThrow(
+                new org.springframework.web.client.ResourceAccessException("Read timed out", new java.net.SocketTimeoutException("Read timed out")));
+
+        GatewayProxyController controller = new GatewayProxyController(
+                "http://localhost:8084", "http://localhost:8085", "http://localhost:8081",
+                "http://localhost:8082", "http://localhost:8086", mockRestClient);
+
+        org.springframework.mock.web.MockHttpServletRequest request = new org.springframework.mock.web.MockHttpServletRequest("GET", "/api/v1/merchants/test");
+        org.springframework.http.ResponseEntity<byte[]> response = controller.proxyRequest(org.springframework.http.HttpMethod.GET, request, null);
+
+        org.junit.jupiter.api.Assertions.assertEquals(504, response.getStatusCode().value());
+        org.junit.jupiter.api.Assertions.assertTrue(new String(response.getBody()).contains("GATEWAY_TIMEOUT"));
+    }
 }
