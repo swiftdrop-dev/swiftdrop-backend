@@ -23,4 +23,16 @@ public interface ParcelRepository extends JpaRepository<Parcel, String> {
             String courierId, String estimatedDeliveryDate, Pageable pageable);
 
     List<Parcel> findByIdInAndCourierId(Collection<String> ids, String courierId);
+
+    Page<Parcel> findBySenderIdOrderByCreatedAtDesc(String senderId, Pageable pageable);
+
+    Page<Parcel> findBySenderIdAndStatusOrderByCreatedAtDesc(String senderId, String status, Pageable pageable);
+
+    Optional<Parcel> findByIdAndSenderId(String id, String senderId);
+
+    Optional<Parcel> findByTrackingNumber(String trackingNumber);
+
+    Page<Parcel> findByCourierIdOrderByCreatedAtDesc(String courierId, Pageable pageable);
+
+    Page<Parcel> findByCourierIdAndStatusOrderByCreatedAtDesc(String courierId, String status, Pageable pageable);
 }
