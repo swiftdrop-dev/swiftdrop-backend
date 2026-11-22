@@ -1,19 +1,25 @@
 # M5 Merchant Orders API (prepared, disabled)
 
 This façade uses M4 API-key verification; parcel-service remains authoritative.
-No public route, live ParcelClient bean, datasource or migration runner is enabled.
+The order routes are disabled by default. No live ParcelClient bean is wired.
 Both merchant.persistence.enabled and merchant.orders.enabled must be true for
 order beans; orders.enabled is absent (false) by default. Even then a ParcelClient
-must be deliberately supplied, and the unchanged deny-all HTTP policy still applies.
+must be deliberately supplied with downstream service authentication.
 
 ## Public contract
 
 X-API-Key must occur exactly once. POST /api/v1/merchant/orders requires orders:write
 and one Idempotency-Key (1-128 ASCII letters, digits, '.', '_', ':', '-'). GET list
-and GET /{id} require orders:read. Merchant identity comes exclusively from the M4
-verifier, which checks the hash, expiry, revocation and current APPROVED state on
-each request, including retries. Machine principals never become human owners.
-Order id is the canonical M2 parcel UUID. All success responses have no-store.
+and GET /{id}, including their HEAD equivalents, require orders:read.
+The order security chain authenticates each request with X-API-Key, including
+retries. Merchant identity comes from the verified credential after checking its
+hash, active state, expiry, revocation and current APPROVED status. A JWT alone
+cannot authorize an order operation. M4 routes retain their JWT rules.
+Order IDs are opaque, case-sensitive Parcel Service strings such as
+`prc_1234567890abcdef`. The same ID appears in the response, detail path,
+creation Location and replay snapshot. IDs contain 1–64 ASCII letters, digits,
+underscores or hyphens. Merchant IDs and downstream request IDs are UUIDs.
+All success responses have no-store.
 
 POST fields: merchantOrderRef, recipient{name,phone}, pickupAddress and deliveryAddress
 {street,city,district,postalCode?}, description, weightKg, size, declaredValue?,
@@ -30,7 +36,7 @@ validates returned ownership, page bounds, identifiers, required fields and mone
 Detail returns 404 for missing/unowned IDs under the M2 contract. Mismatched owner
 responses are rejected as 502 and never exposed.
 
-Errors use code/message: 400 validation, 401 invalid/unapproved credentials, 403 scope,
+Errors use code/message: 400 validation, 401 missing or unusable credentials, 403 merchant approval or scope,
 404 missing order, 409 fingerprint conflict/in-progress, 422 definitive M2 validation
 rejection, 502 invalid upstream, 503 unavailable/uncertain, 504 transport timeout.
 REQUEST_IN_PROGRESS includes Retry-After: 5. Upstream bodies/URLs/causes are not
@@ -44,11 +50,14 @@ rotation. Fingerprint v1 sorts object fields and normalizes numeric scale; strin
 are exact, including whitespace. Raw idempotency keys and API keys are never stored.
 Only validated requests are claimed. Never delete records automatically.
 
-claim/complete/uncertain methods execute in separate REQUIRES_NEW transactions via
-Spring proxies. The network call is outside transactions. Unique insert races fail
-as 409; retry with the same key. Completion locks the row and checks attempt token
-and state. Replacement credentials may replay a completed request for the same
-merchant after verification. Snapshot version v1 is explicitly decoded.
+Claims, collision rereads, and outcome writes use separate REQUIRES_NEW transactions.
+The network call is outside transactions. After a duplicate-key insert rolls back,
+the service locks and rereads the winning claim for the same merchant and key. A
+different fingerprint returns 409; a matching fingerprint follows the existing
+replay, in-progress, or uncertain behavior. A collision without a winning claim
+and other order storage failures return a sanitized 503. Completion checks the
+attempt token and state. Replacement credentials may replay a completed request
+for the same merchant after verification. Snapshot version v1 is explicitly decoded.
 
 IN_PROGRESS has a 60-second lease. A competing request gets 409 while the lease
 is active. After expiry the record becomes UNCERTAIN; it is NOT reclaimed or resent.
@@ -76,10 +85,16 @@ requires an approved HTTPS base URL, bounded timeouts and service-authentication
 implementation. Its fallback fails before network access. Redirects are disabled;
 POST is never automatically retried. Logging/APM must redact auth headers and PII.
 
-No shared Neon connection or migration execution is authorized. V1/V2 and datasource
-exclusion remain unchanged. V3 requires separately approved disposable PostgreSQL
-tests for constraints, transaction durability, locking and races. Unit tests simulate
-restarts/competing claims but do not establish distributed exactly-once behavior.
+## V3 rollout
+
+The order flags gate API beans. Flyway discovers V3 in the normal migration location
+and Hibernate validates the mapped order table at startup even with both flags off.
+Keep the existing M4 migration configuration. Before a shared deployment, confirm
+the target Flyway history and obtain approval to apply V3 as a schema-only rollout
+with order routes disabled. If the earlier UUID form of V3 was applied, preserve
+that applied V3 and use a forward migration to convert `parcel_id` to `VARCHAR(64)`.
+Do not rewrite or repair target migration history to accept an edited checksum.
+Validate both fresh startup and the applicable upgrade path on disposable PostgreSQL.
 
 Run mvn -B compile test for all M4/M5 tests. Local transport tests use mock servers
 and one loopback-only timeout server. No M2 process, credential or database is used.

@@ -1,6 +1,7 @@
 package com.swiftdrop.merchant.mapper;
 import com.swiftdrop.merchant.client.dto.*;
 import com.swiftdrop.merchant.client.ParcelClientException;
+import com.swiftdrop.merchant.dto.ParcelId;
 import com.swiftdrop.merchant.dto.response.*;
 import com.swiftdrop.merchant.dto.request.MerchantOrderQuery;
 import jakarta.validation.Validator;
@@ -12,7 +13,7 @@ public final class MerchantOrderMapper {
     public MerchantOrderResponse order(UUID merchant,ParcelResponse response) {
         if (response==null || !merchant.equals(response.merchantId()) || response.order()==null) throw invalid();
         var order=response.order();
-        if (order.id()==null || order.merchantOrderRef()==null || order.merchantOrderRef().isBlank() || order.trackingNumber()==null || order.trackingNumber().isBlank()
+        if (!ParcelId.isValid(order.id()) || order.merchantOrderRef()==null || order.merchantOrderRef().isBlank() || order.trackingNumber()==null || order.trackingNumber().isBlank()
             || !STATUSES.contains(order.status()==null ? "" : order.status()) || order.createdAt()==null || order.details()==null
             || !validator.validate(order.details()).isEmpty() || !order.merchantOrderRef().equals(order.details().merchantOrderRef())
             || order.deliveryFee()==null || order.deliveryFee().signum()<0 || order.totalFee()==null || order.totalFee().signum()<0

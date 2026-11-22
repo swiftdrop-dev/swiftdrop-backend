@@ -53,7 +53,7 @@ paths:
       - in: path
         name: id
         required: true
-        schema: {type: string, format: uuid}
+        schema: {$ref: './merchant-orders.openapi.yaml#/components/schemas/ParcelId'}
     get:
       summary: Owned canonical detail
       responses:

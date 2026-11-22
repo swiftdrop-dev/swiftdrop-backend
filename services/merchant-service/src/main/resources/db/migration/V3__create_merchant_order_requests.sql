@@ -11,7 +11,7 @@ CREATE TABLE merchant_order_requests (
  state VARCHAR(20) NOT NULL CHECK (state IN ('IN_PROGRESS','SUCCEEDED','REJECTED','UNCERTAIN')),
  attempt_token UUID NOT NULL,
  lease_until TIMESTAMP WITH TIME ZONE NOT NULL,
- parcel_id UUID,
+ parcel_id VARCHAR(64),
  response_version VARCHAR(20),
  http_status INTEGER,
  response_snapshot TEXT,

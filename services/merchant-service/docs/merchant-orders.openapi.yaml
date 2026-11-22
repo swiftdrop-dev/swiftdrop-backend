@@ -82,7 +82,7 @@ paths:
         - in: path
           name: id
           required: true
-          schema: {type: string, format: uuid}
+          schema: {$ref: '#/components/schemas/ParcelId'}
       responses:
         '200':
           description: Owned parcel; missing and unowned IDs both return 404
@@ -102,7 +102,7 @@ components:
       description: Exactly one M4 credential; current APPROVED merchant required. Never send in query/body.
   responses:
     Error:
-      description: '400 validation; 401 invalid/unapproved credential; 403 scope; 404 missing/unowned; 409 idempotency conflict/in progress; 422 definitive M2 rejection; 502 upstream contract; 503 unavailable/uncertain; 504 timeout. In-progress includes Retry-After: 5. Default-disabled security can return container errors.'
+      description: '400 validation; 401 missing or unusable API credential; 403 merchant approval or scope; 404 missing/unowned; 409 idempotency conflict/in progress; 422 definitive M2 rejection; 502 upstream contract; 503 unavailable/uncertain or order storage unavailable; 504 timeout. In-progress includes Retry-After: 5. Default-disabled security can return container errors.'
       headers:
         Retry-After:
           schema: {type: integer}
@@ -114,6 +114,13 @@ components:
               code: {type: string}
               message: {type: string}
   schemas:
+    ParcelId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      description: Opaque, case-sensitive Parcel Service identifier.
+      example: prc_1234567890abcdef
     Status:
       type: string
       enum: [PENDING,ASSIGNED,PICKED_UP,IN_TRANSIT,OUT_FOR_DELIVERY,DELIVERED,FAILED,CANCELLED,RETURNED]
@@ -151,7 +158,7 @@ components:
       type: object
       required: [id,merchantOrderRef,trackingNumber,status,details,deliveryFee,totalFee,currency,createdAt]
       properties:
-        id: {type: string, format: uuid}
+        id: {$ref: '#/components/schemas/ParcelId'}
         merchantOrderRef: {type: string}
         trackingNumber: {type: string}
         status: {$ref: '#/components/schemas/Status'}

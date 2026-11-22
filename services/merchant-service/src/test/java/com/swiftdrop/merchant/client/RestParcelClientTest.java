@@ -20,7 +20,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 class RestParcelClientTest {
     static ValidatorFactory factory; MockRestServiceServer server; RestParcelClient client;
-    final UUID merchant=UUID.randomUUID(),parcel=UUID.randomUUID();
+    final UUID merchant=UUID.randomUUID();
+    final String parcel=OrderTestData.PARCEL_ID;
     @BeforeAll static void validation() { factory=Validation.buildDefaultValidatorFactory(); }
     @AfterAll static void close() { factory.close(); }
     @BeforeEach void setup() {
@@ -42,6 +43,24 @@ class RestParcelClientTest {
         String json=new ObjectMapper().findAndRegisterModules().writeValueAsString(OrderTestData.response(UUID.randomUUID(),parcel));
         server.expect(anything()).andRespond(withSuccess(json,MediaType.APPLICATION_JSON));
         assertEquals(502,assertThrows(ParcelClientException.class,()->client.getMerchantParcel(merchant,parcel)).status());
+    }
+    @Test void detailUsesCanonicalStringPathAndRequiresExactId() throws Exception {
+        var mapper=new ObjectMapper().findAndRegisterModules();
+        String url="http://localhost/internal/v1/merchants/"+merchant+"/parcels/"+parcel;
+        server.expect(requestTo(url)).andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(mapper.writeValueAsString(OrderTestData.response(merchant,parcel)),MediaType.APPLICATION_JSON));
+        server.expect(requestTo(url)).andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(mapper.writeValueAsString(OrderTestData.response(merchant,"prc_1234567890ABCDEF")),MediaType.APPLICATION_JSON));
+        assertEquals(parcel,client.getMerchantParcel(merchant,parcel).order().id());
+        assertEquals(502,assertThrows(ParcelClientException.class,()->client.getMerchantParcel(merchant,parcel)).status());
+        server.verify();
+    }
+    @Test void rejectsDownstreamIdsThatCannotBeUsedInAnOrderLocation() throws Exception {
+        String json=new ObjectMapper().findAndRegisterModules().writeValueAsString(OrderTestData.response(merchant,"../other"));
+        server.expect(anything()).andRespond(withSuccess(json,MediaType.APPLICATION_JSON));
+        assertEquals(502,assertThrows(ParcelClientException.class,()->client.createMerchantParcel(
+            merchant,UUID.randomUUID(),new ParcelCreateRequest(OrderTestData.request()))).status());
+        server.verify();
     }
     @Test void malformedJsonIsSanitized() { server.expect(anything()).andRespond(withSuccess("not json",MediaType.APPLICATION_JSON)); assertEquals(502,assertThrows(ParcelClientException.class,()->client.getMerchantParcel(merchant,parcel)).status()); }
     @Test void rejectionIsDefinitiveOnlyForAgreedCreationStatuses() {

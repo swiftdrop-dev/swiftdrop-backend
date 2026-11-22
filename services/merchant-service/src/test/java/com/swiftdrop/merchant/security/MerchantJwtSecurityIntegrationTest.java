@@ -118,6 +118,16 @@ class MerchantJwtSecurityIntegrationTest {
     }
 
     @Test
+    void merchantOrdersAreDeniedWithTheDefaultFeatureFlags() throws Exception {
+        mockMvc.perform(get("/api/v1/merchant/orders").header("X-API-Key", "test-only"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/merchant/orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer("merchant@example.test", "merchant", 120))
+                        .header("X-API-Key", "test-only"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void jwtFilterRunsBeforeAnonymousAndAuthorizationFilters() {
         List<Filter> filters = filterChainProxy.getFilters(PRINCIPAL_PATH);
         int jwtIndex = indexOf(filters, JwtAuthenticationFilter.class);

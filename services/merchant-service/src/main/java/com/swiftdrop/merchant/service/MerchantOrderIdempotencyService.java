@@ -5,6 +5,7 @@ import com.swiftdrop.merchant.repository.MerchantOrderRequestRepository;
 import com.swiftdrop.merchant.security.VerifiedMerchantApiCredential;
 import com.swiftdrop.merchant.exception.MerchantOrderException;
 import java.time.Clock;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.*;
 
@@ -19,7 +20,15 @@ public class MerchantOrderIdempotencyService {
             var request=new MerchantOrderRequest(actor.merchantId(),actor.credentialId(),digest,fingerprint,clock.instant());
             repository.saveAndFlush(request); return new MerchantOrderClaim(request,false);
         }
-        var request=existing.get();
+        return resolveExisting(existing.get(), fingerprint);
+    }
+
+    public Optional<MerchantOrderClaim> claimExisting(VerifiedMerchantApiCredential actor, String digest, String fingerprint) {
+        return repository.lockRequest(actor.merchantId(), digest)
+                .map(request -> resolveExisting(request, fingerprint));
+    }
+
+    private MerchantOrderClaim resolveExisting(MerchantOrderRequest request, String fingerprint) {
         if (!"v1".equals(request.fingerprintVersion()) || !request.fingerprint().equals(fingerprint)) throw error("IDEMPOTENCY_CONFLICT","Idempotency key was used for a different request");
         if (request.state()==MerchantOrderRequestState.SUCCEEDED || request.state()==MerchantOrderRequestState.REJECTED) return new MerchantOrderClaim(request,true);
         if (request.state()==MerchantOrderRequestState.IN_PROGRESS && clock.instant().isBefore(request.leaseUntil())) throw error("REQUEST_IN_PROGRESS","Request is being processed");
@@ -27,7 +36,7 @@ public class MerchantOrderIdempotencyService {
         request.uncertain(request.attemptToken(),clock.instant()); repository.saveAndFlush(request);
         return new MerchantOrderClaim(request,true);
     }
-    public void complete(UUID id,UUID token,int status,String snapshot,UUID parcelId,String location,String failure) {
+    public void complete(UUID id,UUID token,int status,String snapshot,String parcelId,String location,String failure) {
         var request=repository.lockById(id).orElseThrow(()->error("CLAIM_LOST","Request claim unavailable"));
         if (!request.attemptToken().equals(token) || request.state()!=MerchantOrderRequestState.IN_PROGRESS) throw error("CLAIM_LOST","Request claim no longer active");
         request.complete(token,status,snapshot,parcelId,location,failure,clock.instant()); repository.saveAndFlush(request);

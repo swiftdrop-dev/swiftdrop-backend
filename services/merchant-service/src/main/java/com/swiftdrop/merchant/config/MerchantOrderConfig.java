@@ -8,6 +8,7 @@ import com.swiftdrop.merchant.service.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validator;
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 @Configuration
@@ -16,7 +17,11 @@ public class MerchantOrderConfig {
     @Bean MerchantOrderMapper merchantOrderMapper(Validator v) { return new MerchantOrderMapper(v); }
     @Bean MerchantOrderRequestFingerprint merchantOrderRequestFingerprint(ObjectMapper m) { return new MerchantOrderRequestFingerprint(m); }
     @Bean MerchantOrderReplayCodec merchantOrderReplayCodec(ObjectMapper m) { return new MerchantOrderReplayCodec(m); }
-    @Bean MerchantOrderIdempotencyService merchantOrderIdempotencyService(MerchantOrderRequestRepository r,Clock c) { return new MerchantOrderIdempotencyService(r,c); }
+    @Bean
+    MerchantOrderIdempotencyService merchantOrderIdempotencyService(
+            MerchantOrderRequestRepository repository, ObjectProvider<Clock> clock) {
+        return new MerchantOrderIdempotencyService(repository, clock.getIfAvailable(Clock::systemUTC));
+    }
     @Bean MerchantOrderAuthenticator merchantOrderAuthenticator(MerchantApiKeyVerifier v) { return new MerchantOrderAuthenticator(v); }
     // Live M2 REST wiring deliberately absent. No default URL, credentials, or fake client.
     // An explicitly approved ParcelClient bean is required before this configuration can activate.

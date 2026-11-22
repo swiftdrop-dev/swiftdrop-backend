@@ -17,7 +17,7 @@ public class MerchantOrderRequest {
     @Enumerated(EnumType.STRING) @Column(nullable=false,length=20) private MerchantOrderRequestState state;
     @Column(name="attempt_token",nullable=false) private UUID attemptToken;
     @Column(name="lease_until",nullable=false) private Instant leaseUntil;
-    @Column(name="parcel_id") private UUID parcelId;
+    @Column(name="parcel_id",length=64) private String parcelId;
     @Column(name="response_version",length=20) private String responseVersion;
     @Column(name="http_status") private Integer httpStatus;
     @Column(name="response_snapshot",columnDefinition="text") private String responseSnapshot;
@@ -34,7 +34,7 @@ public class MerchantOrderRequest {
         downstreamRequestId=UUID.randomUUID(); attemptToken=UUID.randomUUID(); leaseUntil=now.plusSeconds(60);
         state=MerchantOrderRequestState.IN_PROGRESS; createdAt=now; updatedAt=now;
     }
-    public void complete(UUID token,int status,String snapshot,UUID parcelId,String location,String failure,Instant now) {
+    public void complete(UUID token,int status,String snapshot,String parcelId,String location,String failure,Instant now) {
         if (!attemptToken.equals(token) || state!=MerchantOrderRequestState.IN_PROGRESS) throw new IllegalStateException("Request claim no longer active");
         this.httpStatus=status; responseSnapshot=snapshot; responseVersion="v1"; this.parcelId=parcelId; this.location=location; failureCode=failure;
         state=status==201 ? MerchantOrderRequestState.SUCCEEDED : MerchantOrderRequestState.REJECTED;

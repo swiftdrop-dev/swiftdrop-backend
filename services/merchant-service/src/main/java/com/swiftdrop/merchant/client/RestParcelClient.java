@@ -47,7 +47,7 @@ public final class RestParcelClient implements ParcelClient {
             mapper.page(merchant,response,query); return response;
         },false);
     }
-    public ParcelResponse getMerchantParcel(UUID merchant,UUID parcel) {
+    public ParcelResponse getMerchantParcel(UUID merchant,String parcel) {
         return call(()->{
             var response=client.get().uri("/internal/v1/merchants/{merchant}/parcels/{parcel}",merchant,parcel)
                 .headers(authentication::apply).retrieve().body(ParcelResponse.class);
