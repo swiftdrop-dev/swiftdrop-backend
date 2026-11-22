@@ -13,6 +13,9 @@ public class Courier {
     @Column(name = "id", length = 64, nullable = false)
     private String id;
 
+    @Column(name = "user_id", length = 64)
+    private String userId;
+
     @Column(name = "name", nullable = false)
     private String name;
 
@@ -59,6 +62,7 @@ public class Courier {
     }
 
     public String getId() { return id; }
+    public String getUserId() { return userId; }
     public String getName() { return name; }
     public String getEmail() { return email; }
     public String getPhone() { return phone; }
@@ -68,4 +72,7 @@ public class Courier {
     public Boolean getAvailable() { return available; }
     public Integer getDeliveriesToday() { return deliveriesToday; }
     public Integer getTotalDeliveries() { return totalDeliveries; }
+
+    public void setUserId(String userId) { this.userId = userId; }
+    public void setAvailable(Boolean available) { this.available = available; }
 }

@@ -31,5 +31,8 @@ public interface ParcelAssignmentRepository extends JpaRepository<ParcelAssignme
     Page<ParcelAssignment> findByCourierIdAndAssignedAtGreaterThanEqualAndAssignedAtLessThanAndUnassignedAtIsNullOrderByAssignedAtAscIdAsc(
             String courierId, Instant startInclusive, Instant endExclusive, Pageable pageable);
 
+    Page<ParcelAssignment> findByCourierIdAndUnassignedAtIsNullOrderByAssignedAtDesc(
+            String courierId, Pageable pageable);
+
     List<ParcelAssignment> findByParcelIdOrderByAssignedAtAscIdAsc(String parcelId);
 }
