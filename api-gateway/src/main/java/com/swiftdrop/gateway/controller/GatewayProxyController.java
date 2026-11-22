@@ -39,19 +39,22 @@ public class GatewayProxyController {
     private final String authServiceUrl;
     private final String parcelServiceUrl;
     private final String courierServiceUrl;
+    private final String pricingServiceUrl;
 
     public GatewayProxyController(
             @Value("${services.merchant.url:http://localhost:8084}") String merchantServiceUrl,
             @Value("${services.dispatch.url:http://localhost:8085}") String dispatchServiceUrl,
             @Value("${services.auth.url:http://localhost:8081}") String authServiceUrl,
             @Value("${services.parcel.url:http://localhost:8082}") String parcelServiceUrl,
-            @Value("${services.courier.url:http://localhost:8086}") String courierServiceUrl) {
+            @Value("${services.courier.url:http://localhost:8086}") String courierServiceUrl,
+            @Value("${services.pricing.url:http://localhost:8083}") String pricingServiceUrl) {
         this.restClient = RestClient.builder().build();
         this.merchantServiceUrl = merchantServiceUrl;
         this.dispatchServiceUrl = dispatchServiceUrl;
         this.authServiceUrl = authServiceUrl;
         this.parcelServiceUrl = parcelServiceUrl;
         this.courierServiceUrl = courierServiceUrl;
+        this.pricingServiceUrl = pricingServiceUrl;
     }
 
     @RequestMapping(value = {
@@ -59,7 +62,10 @@ public class GatewayProxyController {
             "/api/v1/dispatch/**",
             "/api/v1/auth/**",
             "/api/v1/parcels/**",
-            "/api/v1/couriers/**"
+            "/api/v1/couriers/**",
+            "/api/v1/pricing/**",
+            "/api/v1/zones/**",
+            "/api/v1/receipts/**"
     },
             method = {org.springframework.web.bind.annotation.RequestMethod.GET,
                     org.springframework.web.bind.annotation.RequestMethod.POST,
@@ -85,6 +91,10 @@ public class GatewayProxyController {
             targetBaseUrl = parcelServiceUrl;
         } else if (path.equals("/api/v1/couriers") || path.startsWith("/api/v1/couriers/")) {
             targetBaseUrl = courierServiceUrl;
+        } else if (path.equals("/api/v1/pricing") || path.startsWith("/api/v1/pricing/")
+                || path.equals("/api/v1/zones") || path.startsWith("/api/v1/zones/")
+                || path.equals("/api/v1/receipts") || path.startsWith("/api/v1/receipts/")) {
+            targetBaseUrl = pricingServiceUrl;
         } else {
             return ResponseEntity.notFound().build();
         }
