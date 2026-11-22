@@ -53,4 +53,32 @@ class CourierControllerTest {
                 .andExpect(jsonPath("$.message").value("Courier not found: missing"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
+
+    @Test
+    void returnsMyProfileUsingHeaderUserId() throws Exception {
+        when(courierService.getCourierByUserId("usr_courier_123")).thenReturn(new CourierResponse(
+                "cou_001", "Nimal Senanayake", "motorcycle", "ABC-1234",
+                4.8, true, 3, 120));
+
+        mockMvc.perform(get("/api/v1/couriers/me")
+                        .header("X-User-Id", "usr_courier_123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("cou_001"))
+                .andExpect(jsonPath("$.name").value("Nimal Senanayake"));
+    }
+
+    @Test
+    void updatesMyAvailability() throws Exception {
+        when(courierService.updateAvailability("usr_courier_123", false)).thenReturn(new CourierResponse(
+                "cou_001", "Nimal Senanayake", "motorcycle", "ABC-1234",
+                4.8, false, 3, 120));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/couriers/me/availability")
+                        .header("X-User-Id", "usr_courier_123")
+                        .contentType("application/json")
+                        .content("{\"isAvailable\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(false));
+    }
 }
+

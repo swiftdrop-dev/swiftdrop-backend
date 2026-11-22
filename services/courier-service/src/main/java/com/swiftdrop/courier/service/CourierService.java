@@ -19,9 +19,31 @@ public class CourierService {
     public CourierResponse getCourierById(String id) {
         Courier courier = courierRepository.findById(id)
                 .orElseThrow(() -> new CourierNotFoundException(id));
+        return toResponse(courier);
+    }
+
+    public CourierResponse getCourierByUserId(String userId) {
+        Courier courier = courierRepository.findByUserId(userId)
+                .or(() -> courierRepository.findById(userId))
+                .orElseThrow(() -> new CourierNotFoundException(userId));
+        return toResponse(courier);
+    }
+
+    @Transactional
+    public CourierResponse updateAvailability(String userId, boolean isAvailable) {
+        Courier courier = courierRepository.findByUserId(userId)
+                .or(() -> courierRepository.findById(userId))
+                .orElseThrow(() -> new CourierNotFoundException(userId));
+        courier.setAvailable(isAvailable);
+        Courier saved = courierRepository.save(courier);
+        return toResponse(saved);
+    }
+
+    private CourierResponse toResponse(Courier courier) {
         return new CourierResponse(
                 courier.getId(), courier.getName(), courier.getVehicleType(),
                 courier.getVehiclePlate(), courier.getRating(),
                 courier.getAvailable(), courier.getDeliveriesToday(), courier.getTotalDeliveries());
     }
 }
+
