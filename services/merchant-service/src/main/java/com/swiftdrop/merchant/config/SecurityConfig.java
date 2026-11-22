@@ -1,6 +1,7 @@
 package com.swiftdrop.merchant.config;
 
 import com.swiftdrop.merchant.security.JwtAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,6 +24,13 @@ public class SecurityConfig {
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtServletRegistration() {
+        var registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -49,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
                         // Other endpoints have no approved public or ownership policy yet.
                         .requestMatchers("/api/v1/merchants/**").denyAll()
+                        .requestMatchers("/api/v1/merchant/orders", "/api/v1/merchant/orders/**").denyAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
