@@ -25,9 +25,9 @@ public class ParcelServiceClient {
 
     public ParcelServiceClient(
             @Value("${services.parcel.url:http://localhost:8082}") String parcelServiceUrl,
-            @Value("${merchant.security.jwt-secret:${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}}") String jwtSecret) {
+            @Value("${merchant.security.jwt-secret:${jwt.secret:${JWT_SECRET}}}") String jwtSecret) {
         this.parcelServiceUrl = parcelServiceUrl;
-        this.jwtSecret = jwtSecret != null && !jwtSecret.isBlank() ? jwtSecret : "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+        this.jwtSecret = jwtSecret != null && !jwtSecret.isBlank() ? jwtSecret : "";
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) Duration.ofSeconds(3).toMillis());
         factory.setReadTimeout((int) Duration.ofSeconds(5).toMillis());
