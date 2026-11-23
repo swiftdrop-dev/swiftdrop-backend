@@ -18,7 +18,7 @@ class ReceiptPdfServiceTest {
     @DisplayName("Generates valid non-empty PDF byte array with PDF header magic bytes")
     void testGenerateParcelReceipt() {
         ParcelResponseDto parcel = ParcelResponseDto.builder()
-                .id(1L)
+                .id("101")
                 .trackingNumber("SWD-77123-LK")
                 .senderName("Sunil Perera")
                 .senderPhone("+94 77 111 2233")

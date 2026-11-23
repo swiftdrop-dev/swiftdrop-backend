@@ -95,4 +95,90 @@ class GatewayProxyControllerTest {
         org.junit.jupiter.api.Assertions.assertEquals(504, response.getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertTrue(new String(response.getBody()).contains("GATEWAY_TIMEOUT"));
     }
+
+    @Test
+    void unauthenticatedAdminRouteReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/admin/users")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void nonAdminRoleForbiddenOnAdminOnlyRoute() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("customer@example.test", "customer"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void dispatcherForbiddenOnAdminOnlyMerchantRoute() throws Exception {
+        mockMvc.perform(get("/api/v1/merchants/admin/pending")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("disp@example.test", "dispatcher"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void dispatcherPermittedOnReportsRoute() throws Exception {
+        // Dispatcher role is permitted through gateway; downstream offline causes 503
+        mockMvc.perform(get("/api/v1/reports/dashboard-kpis")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("disp@example.test", "dispatcher"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void customerForbiddenOnAdministrativeParcelRoute() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/admin/summary")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("cust@example.test", "customer"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void courierForbiddenOnReportingRoute() throws Exception {
+        mockMvc.perform(get("/api/v1/reports/dashboard-kpis")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("courier@example.test", "courier"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void dispatcherForbiddenOnAdminOnlyMerchantVolumeReport() throws Exception {
+        mockMvc.perform(get("/api/v1/reports/merchant-volume")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("disp@example.test", "dispatcher"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminPermittedOnMerchantVolumeReport() throws Exception {
+        mockMvc.perform(get("/api/v1/reports/merchant-volume")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("admin@example.test", "admin"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void adminPermittedOnAdminRoute() throws Exception {
+        // Admin role is permitted through gateway; downstream offline causes 503
+        mockMvc.perform(get("/api/v1/auth/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("admin@example.test", "admin"))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    private static String createTestBearer(String subject, String role) {
+        var key = io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                "test-only-gateway-jwt-key-material-at-least-32-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        java.util.Date now = new java.util.Date();
+        return "Bearer " + io.jsonwebtoken.Jwts.builder()
+                .subject(subject)
+                .claim("role", role)
+                .issuedAt(now)
+                .expiration(new java.util.Date(now.getTime() + 300_000))
+                .signWith(key)
+                .compact();
+    }
 }

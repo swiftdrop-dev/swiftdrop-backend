@@ -28,6 +28,8 @@ public record CreateParcelBookingRequest(
 
         Boolean fragile,
 
-        String paymentMethod
+        String paymentMethod,
+
+        BigDecimal totalFee
 ) {
 }

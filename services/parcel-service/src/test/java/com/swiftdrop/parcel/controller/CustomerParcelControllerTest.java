@@ -40,10 +40,21 @@ class CustomerParcelControllerTest {
     @MockBean
     private ParcelRepository parcelRepository;
 
+    @MockBean
+    private com.swiftdrop.parcel.service.ParcelBookingService parcelBookingService;
+
     @Test
     void booksParcelSuccessfullyAndMarksFeePending() throws Exception {
-        when(parcelRepository.save(any(Parcel.class))).thenAnswer(invocation -> {
-            Parcel p = invocation.getArgument(0);
+        when(parcelBookingService.bookParcel(any(), any())).thenAnswer(invocation -> {
+            com.swiftdrop.parcel.dto.request.CreateParcelBookingRequest req = invocation.getArgument(0);
+            String sender = invocation.getArgument(1);
+            Parcel p = new Parcel("prc_001", null, "SWF-2026-A1B2C3D4", "CREATED", null,
+                    req.recipientName(), req.recipientPhone(), req.recipientAddress());
+            p.setSenderId(sender);
+            p.setWeightKg(req.weightKg());
+            p.setFragile(req.fragile());
+            p.setTotalFee(req.totalFee());
+            p.setPaymentStatus("UNPAID");
             p.setCreatedAt(Instant.parse("2026-11-22T10:00:00Z"));
             return p;
         });
@@ -140,5 +151,61 @@ class CustomerParcelControllerTest {
                 .andExpect(jsonPath("$.id").value("prc_001"))
                 .andExpect(jsonPath("$.trackingNumber").value("SWF-2026-A1B2C3D4"))
                 .andExpect(jsonPath("$.status").value("CREATED"));
+    }
+
+    @Test
+    void booksParcelWithCalculatedFeeSuccessfully() throws Exception {
+        when(parcelBookingService.bookParcel(any(), any())).thenAnswer(invocation -> {
+            com.swiftdrop.parcel.dto.request.CreateParcelBookingRequest req = invocation.getArgument(0);
+            String sender = invocation.getArgument(1);
+            Parcel p = new Parcel("prc_002", null, "SWF-2026-A1B2C3D4", "CREATED", null,
+                    req.recipientName(), req.recipientPhone(), req.recipientAddress());
+            p.setSenderId(sender);
+            p.setWeightKg(req.weightKg());
+            p.setFragile(req.fragile());
+            p.setTotalFee(req.totalFee());
+            p.setPaymentStatus("UNPAID");
+            p.setCreatedAt(Instant.parse("2026-11-22T10:00:00Z"));
+            return p;
+        });
+
+        String payload = """
+                {
+                    "recipientName": "Kamal Perera",
+                    "recipientPhone": "+94771234567",
+                    "recipientAddress": "45 Galle Road, Colombo 03",
+                    "pickupAddress": "12 Warehouse Road, Colombo 10",
+                    "description": "Electronics",
+                    "weightKg": 3.0,
+                    "parcelSize": "STANDARD",
+                    "fragile": false,
+                    "paymentMethod": "COD",
+                    "totalFee": 660.00
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/parcels")
+                        .header("X-User-Id", "usr_customer_123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.totalFee").value(660.00))
+                .andExpect(jsonPath("$.feeStatus").value("CALCULATED"));
+    }
+
+    @Test
+    void retrievesParcelByIdOrTrackingNumberFallback() throws Exception {
+        Parcel p = new Parcel("prc_001", null, "SWF-2026-A1B2C3D4", "CREATED", null,
+                "Kamal Perera", "+94771234567", "45 Galle Road");
+        p.setCreatedAt(Instant.parse("2026-11-22T10:00:00Z"));
+
+        when(parcelRepository.findById("SWF-2026-A1B2C3D4")).thenReturn(Optional.empty());
+        when(parcelRepository.findByTrackingNumber("SWF-2026-A1B2C3D4")).thenReturn(Optional.of(p));
+
+        mockMvc.perform(get("/api/v1/parcels/SWF-2026-A1B2C3D4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("prc_001"))
+                .andExpect(jsonPath("$.trackingNumber").value("SWF-2026-A1B2C3D4"));
     }
 }

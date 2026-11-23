@@ -237,6 +237,19 @@ public class MerchantAdminService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Long> getDashboardSummary() {
+        Map<String, Long> summary = new java.util.HashMap<>();
+        summary.put("totalMerchants", merchantRepository.count());
+        summary.put("pendingApplications", merchantRepository.countByStatusIn(
+                List.of(MerchantStatus.SUBMITTED, MerchantStatus.UNDER_REVIEW)));
+        summary.put("approvedMerchants", merchantRepository.countByStatus(MerchantStatus.APPROVED) + merchantRepository.countByStatus(MerchantStatus.ACTIVE));
+        summary.put("rejectedMerchants", merchantRepository.countByStatus(MerchantStatus.REJECTED));
+        summary.put("suspendedMerchants", merchantRepository.countByStatus(MerchantStatus.SUSPENDED));
+        summary.put("draftMerchants", merchantRepository.countByStatus(MerchantStatus.DRAFT));
+        return summary;
+    }
+
     private Merchant getMerchant(UUID merchantId) {
         return merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant not found: " + merchantId));

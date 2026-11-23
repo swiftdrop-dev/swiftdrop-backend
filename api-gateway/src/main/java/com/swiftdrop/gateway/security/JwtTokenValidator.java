@@ -37,6 +37,7 @@ public final class JwtTokenValidator {
 
             String subject = claims.getSubject();
             Object roleClaim = claims.get("role");
+            String emailClaim = claims.get("email", String.class);
             Date issuedAt = claims.getIssuedAt();
             Date expiration = claims.getExpiration();
             Date now = Date.from(Instant.now());
@@ -52,7 +53,7 @@ public final class JwtTokenValidator {
                 throw new IllegalArgumentException("JWT claims are invalid");
             }
 
-            return new AuthenticatedJwtPrincipal(subject, (String) roleClaim);
+            return new AuthenticatedJwtPrincipal(subject, (String) roleClaim, emailClaim);
         } catch (RuntimeException exception) {
             throw new JwtTokenValidationException();
         }

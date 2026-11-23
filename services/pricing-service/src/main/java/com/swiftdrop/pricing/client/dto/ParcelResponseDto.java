@@ -1,5 +1,7 @@
 package com.swiftdrop.pricing.client.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -10,11 +12,14 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ParcelResponseDto {
-    private Long id;
+    private String id;
     private String trackingNumber;
+    private String senderId;
     private String senderName;
     private String senderPhone;
+    @JsonAlias("pickupAddress")
     private String senderAddress;
     private String recipientName;
     private String recipientPhone;
@@ -22,7 +27,9 @@ public class ParcelResponseDto {
     private String originZone;
     private String destinationZone;
     private BigDecimal weightKg;
+    @JsonAlias("parcelSize")
     private String deliveryType;
+    @JsonAlias("totalFee")
     private BigDecimal finalFee;
     private String status;
     private String paymentStatus;

@@ -1,5 +1,6 @@
 package com.swiftdrop.auth.security;
 
+import com.swiftdrop.auth.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,14 +15,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
-    public JwtAuthFilter(JwtUtil jwtUtil) {
+    public JwtAuthFilter(JwtUtil jwtUtil, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -46,11 +50,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         // Token is valid — populate the SecurityContext
+        String userId = jwtUtil.extractUserId(token);
         String email = jwtUtil.extractEmail(token);
         String role  = jwtUtil.extractRole(token);
 
-        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-        var authentication = new UsernamePasswordAuthenticationToken(email, null, authorities);
+        // Account status enforcement: immediate revocation for deactivated or deleted accounts
+        if (userId != null) {
+            try {
+                var userOpt = userRepository.findById(userId);
+                if (userOpt.isEmpty() || !userOpt.get().isActive()) {
+                    SecurityContextHolder.clearContext();
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Account is deactivated or does not exist.");
+                    return;
+                }
+            } catch (Exception e) {
+                SecurityContextHolder.clearContext();
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Authentication verification service temporarily unavailable.");
+                return;
+            }
+        }
+
+        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role.toUpperCase(Locale.ROOT) : "")));
+        var authentication = new UsernamePasswordAuthenticationToken(userId != null ? userId : email, null, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
 

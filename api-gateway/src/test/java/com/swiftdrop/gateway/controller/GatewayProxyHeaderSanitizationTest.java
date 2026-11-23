@@ -39,4 +39,30 @@ class GatewayProxyHeaderSanitizationTest {
         assertEquals("request-key-123", forwardedHeaders.getFirst("Idempotency-Key"));
         assertEquals("application/json", forwardedHeaders.getFirst(HttpHeaders.ACCEPT));
     }
+
+    @Test
+    void propagatesVerifiedIdentityHeadersWhenAuthenticated() {
+        GatewayProxyController controller = new GatewayProxyController(
+                "http://merchant.test", "http://dispatch.test", "http://auth.test", "http://parcel.test", "http://courier.test", "http://pricing.test");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer valid-token");
+        request.addHeader("X-User-Id", "forged-id");
+        request.addHeader("X-User-Roles", "admin");
+        request.addHeader("X-User-Email", "forged@example.test");
+        HttpHeaders forwardedHeaders = new HttpHeaders();
+
+        var principal = new com.swiftdrop.gateway.security.AuthenticatedJwtPrincipal("user-123", "dispatcher", "disp@example.test");
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                principal, null, java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_DISPATCHER")));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            controller.copyHeaders(request, forwardedHeaders);
+
+            assertEquals("user-123", forwardedHeaders.getFirst("X-User-Id"));
+            assertEquals("dispatcher", forwardedHeaders.getFirst("X-User-Roles"));
+            assertEquals("disp@example.test", forwardedHeaders.getFirst("X-User-Email"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
 }

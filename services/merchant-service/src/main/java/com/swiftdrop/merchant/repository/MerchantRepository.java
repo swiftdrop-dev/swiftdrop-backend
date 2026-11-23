@@ -24,4 +24,8 @@ public interface MerchantRepository extends JpaRepository<Merchant, UUID> {
     Page<Merchant> findByStatus(MerchantStatus status, Pageable pageable);
 
     Page<Merchant> findByStatusIn(Iterable<MerchantStatus> statuses, Pageable pageable);
+
+    long countByStatus(MerchantStatus status);
+
+    long countByStatusIn(Iterable<MerchantStatus> statuses);
 }

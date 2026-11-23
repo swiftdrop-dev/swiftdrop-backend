@@ -116,7 +116,7 @@ public class MerchantCredentialService {
     }
 
     @Transactional
-    public Optional<Merchant> validateApiKey(String rawApiKey) {
+    public Optional<MerchantApiCredential> findValidCredential(String rawApiKey) {
         if (rawApiKey == null || rawApiKey.isBlank()) {
             return Optional.empty();
         }
@@ -141,7 +141,15 @@ public class MerchantCredentialService {
         credential.setLastUsedAt(Instant.now());
         credentialRepository.save(credential);
 
-        return Optional.of(credential.getMerchant());
+        return Optional.of(credential);
+    }
+
+    @Transactional
+    public Optional<Merchant> validateApiKey(String rawApiKey) {
+        return findValidCredential(rawApiKey)
+                .map(MerchantApiCredential::getMerchant)
+                .filter(m -> m.getStatus() == com.swiftdrop.merchant.entity.enums.MerchantStatus.APPROVED
+                        || m.getStatus() == com.swiftdrop.merchant.entity.enums.MerchantStatus.ACTIVE);
     }
 
     private String hashKey(String rawKey) {

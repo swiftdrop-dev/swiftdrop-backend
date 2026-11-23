@@ -38,5 +38,16 @@ public class AuthController {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * POST /api/v1/auth/google
+     * Validates Google ID token, links or creates user, and returns SwiftDrop JWT.
+     */
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody com.swiftdrop.auth.dto.request.GoogleAuthRequest request) {
+        AuthResponse response = authService.authenticateWithGoogle(request);
+        return ResponseEntity.ok(response);
+    }
 }
+
 

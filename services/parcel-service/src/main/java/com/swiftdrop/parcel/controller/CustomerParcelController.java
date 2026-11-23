@@ -31,9 +31,12 @@ import java.util.UUID;
 public class CustomerParcelController {
 
     private final ParcelRepository parcelRepository;
+    private final com.swiftdrop.parcel.service.ParcelBookingService parcelBookingService;
 
-    public CustomerParcelController(ParcelRepository parcelRepository) {
+    public CustomerParcelController(ParcelRepository parcelRepository,
+                                  com.swiftdrop.parcel.service.ParcelBookingService parcelBookingService) {
         this.parcelRepository = parcelRepository;
+        this.parcelBookingService = parcelBookingService;
     }
 
     @PostMapping
@@ -42,33 +45,7 @@ public class CustomerParcelController {
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId) {
 
         String senderId = resolveUserId(headerUserId);
-        String parcelId = "prc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        String trackingNumber = String.format("SWF-%d-%08X",
-                LocalDate.now().getYear(),
-                UUID.randomUUID().hashCode() & 0xFFFFFFFFL);
-
-        Parcel parcel = new Parcel(parcelId, null);
-        parcel.setEstimatedDeliveryDate(null);
-        parcel.setRecipientName(request.recipientName());
-        parcel.setRecipientPhone(request.recipientPhone());
-        parcel.setRecipientAddress(request.recipientAddress());
-        parcel.changeStatus("CREATED");
-
-        parcel.setSenderId(senderId);
-        parcel.setSenderName(request.recipientName()); // or sender profile
-        parcel.setSenderPhone(request.recipientPhone());
-        parcel.setPickupAddress(request.pickupAddress());
-        parcel.setWeightKg(request.weightKg());
-        parcel.setParcelSize(request.parcelSize() != null ? request.parcelSize() : "STANDARD");
-        parcel.setDescription(request.description());
-        parcel.setFragile(Boolean.TRUE.equals(request.fragile()));
-        parcel.setTotalFee(null); // Explicitly null: Pending Pricing Service
-        parcel.setPaymentMethod(request.paymentMethod() != null ? request.paymentMethod() : "COD");
-        parcel.setPaymentStatus("UNPAID");
-
-        parcel.setTrackingNumber(trackingNumber);
-
-        Parcel saved = parcelRepository.save(parcel);
+        Parcel saved = parcelBookingService.bookParcel(request, senderId);
         ParcelBookingResponse response = toBookingResponse(saved);
         return ResponseEntity.created(URI.create("/api/v1/parcels/" + saved.getId())).body(response);
     }
@@ -107,6 +84,7 @@ public class CustomerParcelController {
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId) {
 
         Parcel parcel = parcelRepository.findById(id)
+                .or(() -> parcelRepository.findByTrackingNumber(id))
                 .orElseThrow(() -> new ParcelNotFoundException(id));
         return ResponseEntity.ok(toBookingResponse(parcel));
     }
@@ -120,10 +98,13 @@ public class CustomerParcelController {
     }
 
     private String resolveUserId(String headerUserId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.swiftdrop.parcel.security.UserPrincipal principal) {
+            return principal.getId() != null ? principal.getId().toString() : principal.getEmail();
+        }
         if (headerUserId != null && !headerUserId.isBlank()) {
             return headerUserId;
         }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getName() != null && !auth.getName().isBlank()) {
             return auth.getName();
         }

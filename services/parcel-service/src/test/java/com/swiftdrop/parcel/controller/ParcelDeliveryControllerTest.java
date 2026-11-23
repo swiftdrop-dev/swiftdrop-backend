@@ -67,6 +67,9 @@ class ParcelDeliveryControllerTest {
     @MockBean
     private ParcelStatusService statusService;
 
+    @MockBean
+    private com.swiftdrop.parcel.repository.ParcelStatusHistoryRepository historyRepository;
+
     @Test
     void getsAssignedDeliveriesForCourier() throws Exception {
         ParcelAssignment assignment = new ParcelAssignment("prc_001", "cou_001",

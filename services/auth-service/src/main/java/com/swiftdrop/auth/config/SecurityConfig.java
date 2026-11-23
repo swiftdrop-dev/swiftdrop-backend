@@ -49,14 +49,16 @@ public class SecurityConfig {
             .sessionManagement(session ->
                     session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-            // Public endpoints
+            // Endpoints authorization
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers(
                             "/api/v1/auth/login",
                             "/api/v1/auth/register",
+                            "/api/v1/auth/google",
                             "/actuator/health",
                             "/actuator/info"
                     ).permitAll()
+                    .requestMatchers("/api/v1/auth/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             )
 

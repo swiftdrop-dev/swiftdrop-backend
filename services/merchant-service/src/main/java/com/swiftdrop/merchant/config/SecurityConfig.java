@@ -46,9 +46,12 @@ public class SecurityConfig {
                         .hasAnyRole("CUSTOMER", "MERCHANT")
                         .requestMatchers("/api/v1/merchants/onboarding/me").hasRole("MERCHANT")
                         .requestMatchers("/api/v1/merchants/onboarding/**").hasAnyRole("MERCHANT", "ADMIN")
-                        .requestMatchers("/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/*/credentials", "/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/*/webhooks", "/api/v1/merchants/*/webhooks/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/orders", "/api/v1/merchants/orders/**",
+                                         "/api/v1/merchant/orders", "/api/v1/merchant/orders/**").permitAll()
                         // Other endpoints have no approved public or ownership policy yet.
-                        .requestMatchers("/api/v1/merchants/**").denyAll()
+                        .requestMatchers("/api/v1/merchants/**", "/api/v1/merchant/**").denyAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

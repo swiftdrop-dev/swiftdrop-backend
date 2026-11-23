@@ -49,6 +49,11 @@ public class MerchantAdminController {
         return ResponseEntity.ok(ApiResponse.success(page));
     }
 
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Long>>> getSummary() {
+        return ResponseEntity.ok(ApiResponse.success(adminService.getDashboardSummary()));
+    }
+
     @PostMapping("/{id}/approve")
     public ResponseEntity<ApiResponse<MerchantResponse>> approve(
             @PathVariable("id") UUID id,

@@ -8,4 +8,6 @@ import java.util.List;
 public interface ParcelStatusHistoryRepository extends JpaRepository<ParcelStatusHistory, Long> {
 
     List<ParcelStatusHistory> findByParcelIdOrderByChangedAtAscIdAsc(String parcelId);
+
+    java.util.Optional<ParcelStatusHistory> findFirstByParcelIdOrderByChangedAtDesc(String parcelId);
 }
