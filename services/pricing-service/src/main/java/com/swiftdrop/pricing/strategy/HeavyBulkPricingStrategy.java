@@ -20,7 +20,9 @@ public class HeavyBulkPricingStrategy implements PricingStrategy {
 
     @Override
     public boolean supports(String deliveryType) {
-        return STRATEGY_TYPE.equalsIgnoreCase(deliveryType != null ? deliveryType.trim() : "");
+        if (deliveryType == null) return false;
+        String trimmed = deliveryType.trim();
+        return STRATEGY_TYPE.equalsIgnoreCase(trimmed) || "HEAVY_BULK".equalsIgnoreCase(trimmed);
     }
 
     @Override

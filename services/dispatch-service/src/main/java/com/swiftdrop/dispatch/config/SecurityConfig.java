@@ -46,8 +46,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/error").permitAll()
-                        // No trusted service-to-service identity contract exists for projection sync yet.
-                        .requestMatchers("/api/v1/dispatch/projections/**").denyAll()
+                        // Projection sync requires administrative authority.
+                        .requestMatchers("/api/v1/dispatch/projections/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/dispatch/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/dispatch/courier/**").hasRole("COURIER")
                         .requestMatchers("/api/v1/dispatch/jobs/**").hasAnyRole("DISPATCHER", "ADMIN")

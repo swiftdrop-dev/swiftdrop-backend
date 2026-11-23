@@ -6,5 +6,6 @@ public enum BusinessType {
     PARTNERSHIP,
     PRIVATE_LIMITED,
     PUBLIC_LIMITED,
+    RETAIL,
     OTHER
 }

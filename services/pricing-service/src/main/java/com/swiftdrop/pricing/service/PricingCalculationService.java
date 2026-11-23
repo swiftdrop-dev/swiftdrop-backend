@@ -61,6 +61,7 @@ public class PricingCalculationService {
     private ZoneRate resolveZoneRate(FeeEstimateRequest request) {
         if (request.getFromZoneId() != null && request.getToZoneId() != null) {
             return zoneRateRepository.findByFromZoneIdAndToZoneId(request.getFromZoneId(), request.getToZoneId())
+                    .or(() -> zoneRateRepository.findByFromZoneIdAndToZoneId(request.getToZoneId(), request.getFromZoneId()))
                     .orElseThrow(() -> new ResourceNotFoundException(String.format(
                             "No pricing rate configured between Zone ID %d and Zone ID %d", 
                             request.getFromZoneId(), request.getToZoneId())));
@@ -76,6 +77,7 @@ public class PricingCalculationService {
                     .orElseThrow(() -> new ResourceNotFoundException("Destination zone not recognized: " + request.getToZoneCode()));
 
             return zoneRateRepository.findByFromZoneIdAndToZoneId(from.getId(), to.getId())
+                    .or(() -> zoneRateRepository.findByFromZoneIdAndToZoneId(to.getId(), from.getId()))
                     .orElseThrow(() -> new ResourceNotFoundException(String.format(
                             "No delivery route configured from %s to %s", from.getName(), to.getName())));
         }

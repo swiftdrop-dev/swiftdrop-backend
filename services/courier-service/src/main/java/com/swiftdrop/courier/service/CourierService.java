@@ -24,6 +24,7 @@ public class CourierService {
 
     public CourierResponse getCourierByUserId(String userId) {
         Courier courier = courierRepository.findByUserId(userId)
+                .or(() -> courierRepository.findByEmail(userId))
                 .or(() -> courierRepository.findById(userId))
                 .orElseThrow(() -> new CourierNotFoundException(userId));
         return toResponse(courier);
@@ -32,11 +33,25 @@ public class CourierService {
     @Transactional
     public CourierResponse updateAvailability(String userId, boolean isAvailable) {
         Courier courier = courierRepository.findByUserId(userId)
+                .or(() -> courierRepository.findByEmail(userId))
                 .or(() -> courierRepository.findById(userId))
                 .orElseThrow(() -> new CourierNotFoundException(userId));
         courier.setAvailable(isAvailable);
         Courier saved = courierRepository.save(courier);
         return toResponse(saved);
+    }
+
+    public java.util.List<CourierResponse> getAllCouriers() {
+        return courierRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public java.util.Map<String, Long> getCourierSummary() {
+        java.util.List<Courier> all = courierRepository.findAll();
+        long total = all.size();
+        long available = all.stream().filter(c -> Boolean.TRUE.equals(c.getAvailable())).count();
+        return java.util.Map.of("totalCouriers", total, "availableCouriers", available);
     }
 
     private CourierResponse toResponse(Courier courier) {

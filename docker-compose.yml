@@ -1,10 +1,32 @@
 services:
+  postgres:
+    profiles:
+      - local-db
+    image: postgres:16-alpine
+    container_name: swiftdrop-postgres
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - swiftdrop-network
+
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: swiftdrop-rabbitmq
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -22,60 +44,31 @@ services:
       dockerfile: Dockerfile
     container_name: swiftdrop-auth-service
     ports:
-      - "${AUTH_SERVICE_PORT:-8081}:8081"
+      - "127.0.0.1:${AUTH_SERVICE_PORT:-8081}:8081"
     environment:
       SERVER_PORT: 8081
-      DB_URL: ${AUTH_DB_URL:-jdbc:postgresql://localhost:5432/auth_db}
-      DB_USERNAME: ${AUTH_DB_USERNAME:-postgres}
-      DB_PASSWORD: ${AUTH_DB_PASSWORD:-postgres}
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
+      PGPORT: ${PGPORT:-5432}
+      PGDATABASE: auth_db
+      PGUSER: ${AUTH_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      PGPASSWORD: ${AUTH_DB_PASSWORD:-${PGPASSWORD:-}}
+      PGSSLMODE: ${PGSSLMODE:-require}
+      DB_URL: ${AUTH_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/auth_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      DB_USERNAME: ${AUTH_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      DB_PASSWORD: ${AUTH_DB_PASSWORD:-${PGPASSWORD:-}}
+      AUTH_DB_URL: ${AUTH_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/auth_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      AUTH_DB_USERNAME: ${AUTH_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-${PGPASSWORD:-}}
       JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost}
-    networks:
-      - swiftdrop-network
-
-  merchant-service:
-    build:
-      context: ./services/merchant-service
-      dockerfile: Dockerfile
-    container_name: swiftdrop-merchant-service
-    ports:
-      - "${MERCHANT_SERVICE_PORT:-8084}:8084"
-    environment:
-      SERVER_PORT: 8084
-      SPRING_DATASOURCE_URL: ${MERCHANT_DB_URL:-jdbc:postgresql://localhost:5432/merchantdb}
-      SPRING_DATASOURCE_USERNAME: ${MERCHANT_DB_USERNAME:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${MERCHANT_DB_PASSWORD:-postgres}
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
-      MERCHANT_SECURITY_JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - swiftdrop-network
-
-  dispatch-service:
-    build:
-      context: ./services/dispatch-service
-      dockerfile: Dockerfile
-    container_name: swiftdrop-dispatch-service
-    ports:
-      - "${DISPATCH_SERVICE_PORT:-8085}:8085"
-    environment:
-      SERVER_PORT: 8085
-      SPRING_DATASOURCE_URL: ${DISPATCH_DB_URL:-jdbc:postgresql://localhost:5432/dispatcherdb}
-      SPRING_DATASOURCE_USERNAME: ${DISPATCH_DB_USERNAME:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${DISPATCH_DB_PASSWORD:-postgres}
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
-      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_VERIFY_ONLINE: ${GOOGLE_VERIFY_ONLINE:-false}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - swiftdrop-network
 
@@ -85,33 +78,36 @@ services:
       dockerfile: Dockerfile
     container_name: swiftdrop-parcel-service
     ports:
-      - "${PARCEL_SERVICE_PORT:-8082}:8082"
+      - "127.0.0.1:${PARCEL_SERVICE_PORT:-8082}:8082"
     environment:
       SERVER_PORT: 8082
-      PGHOST: ${PGHOST:-localhost}
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
       PGPORT: ${PGPORT:-5432}
       PGDATABASE: ${PARCEL_DB_NAME:-parcel_db}
-      PGUSER: ${PARCEL_DB_USER:-postgres}
-      PGPASSWORD: ${PARCEL_DB_PASSWORD:-postgres}
-      PGSSLMODE: ${PGSSLMODE:-prefer}
-    networks:
-      - swiftdrop-network
-
-  courier-service:
-    build:
-      context: ./services/courier-service
-      dockerfile: Dockerfile
-    container_name: swiftdrop-courier-service
-    ports:
-      - "${COURIER_SERVICE_PORT:-8086}:8086"
-    environment:
-      SERVER_PORT: 8086
-      PGHOST: ${PGHOST:-localhost}
-      PGPORT: ${PGPORT:-5432}
-      PGDATABASE: ${COURIER_DB_NAME:-courier_db}
-      PGUSER: ${COURIER_DB_USER:-postgres}
-      PGPASSWORD: ${COURIER_DB_PASSWORD:-postgres}
-      PGSSLMODE: ${PGSSLMODE:-prefer}
+      PGUSER: ${PARCEL_DB_USER:-${PGUSER:-neondb_owner}}
+      PGPASSWORD: ${PARCEL_DB_PASSWORD:-${PGPASSWORD:-}}
+      PGSSLMODE: ${PGSSLMODE:-require}
+      PARCEL_DB_URL: ${PARCEL_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/parcel_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      PARCEL_DB_USERNAME: ${PARCEL_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      PARCEL_DB_PASSWORD: ${PARCEL_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_DATASOURCE_URL: ${PARCEL_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/parcel_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${PARCEL_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${PARCEL_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      PARCEL_OTP_HMAC_SECRET: ${PARCEL_OTP_HMAC_SECRET:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - swiftdrop-network
 
@@ -121,16 +117,241 @@ services:
       dockerfile: Dockerfile
     container_name: swiftdrop-pricing-service
     ports:
-      - "${PRICING_SERVICE_PORT:-8083}:8083"
+      - "127.0.0.1:${PRICING_SERVICE_PORT:-8083}:8083"
     environment:
       SERVER_PORT: 8083
-      PGHOST: ${PGHOST:-localhost}
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
       PGPORT: ${PGPORT:-5432}
       PGDATABASE: ${PRICING_DB_NAME:-pricing_db}
-      PGUSER: ${PRICING_DB_USER:-postgres}
-      PGPASSWORD: ${PRICING_DB_PASSWORD:-postgres}
-      PGSSLMODE: ${PGSSLMODE:-prefer}
+      PGUSER: ${PRICING_DB_USER:-${PGUSER:-neondb_owner}}
+      PGPASSWORD: ${PRICING_DB_PASSWORD:-${PGPASSWORD:-}}
+      PGSSLMODE: ${PGSSLMODE:-require}
+      PRICING_DB_URL: ${PRICING_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/pricing_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      PRICING_DB_USERNAME: ${PRICING_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      PRICING_DB_PASSWORD: ${PRICING_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_DATASOURCE_URL: ${PRICING_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/pricing_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${PRICING_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${PRICING_DB_PASSWORD:-${PGPASSWORD:-}}
       PARCEL_SERVICE_URL: http://parcel-service:8082
+      SERVICES_PARCEL_URL: http://parcel-service:8082
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  merchant-service:
+    build:
+      context: ./services/merchant-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-merchant-service
+    ports:
+      - "127.0.0.1:${MERCHANT_SERVICE_PORT:-8084}:8084"
+    environment:
+      SERVER_PORT: 8084
+      MERCHANT_DB_URL: ${MERCHANT_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/merchantdb?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      MERCHANT_DB_USERNAME: ${MERCHANT_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      MERCHANT_DB_PASSWORD: ${MERCHANT_DB_PASSWORD:-${PGPASSWORD:-}}
+      MERCHANT_FLYWAY_USER: ${MERCHANT_FLYWAY_USER:-${MERCHANT_DB_USERNAME:-${PGUSER:-neondb_owner}}}
+      MERCHANT_FLYWAY_PASSWORD: ${MERCHANT_FLYWAY_PASSWORD:-${MERCHANT_DB_PASSWORD:-${PGPASSWORD:-}}}
+      SPRING_DATASOURCE_URL: ${MERCHANT_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/merchantdb?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${MERCHANT_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${MERCHANT_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      PARCEL_SERVICE_URL: http://parcel-service:8082
+      PRICING_SERVICE_URL: http://pricing-service:8083
+      SERVICES_PARCEL_URL: http://parcel-service:8082
+      SERVICES_PRICING_URL: http://pricing-service:8083
+      MERCHANT_WEBHOOK_ENCRYPTION_KEY: ${MERCHANT_WEBHOOK_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      MERCHANT_WEBHOOK_ALLOW_LOCALHOST: "true"
+      MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP: "true"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  dispatch-service:
+    build:
+      context: ./services/dispatch-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-dispatch-service
+    ports:
+      - "127.0.0.1:${DISPATCH_SERVICE_PORT:-8085}:8085"
+    environment:
+      SERVER_PORT: 8085
+      DISPATCH_DB_URL: ${DISPATCH_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/dispatcherdb?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      DISPATCH_DB_USERNAME: ${DISPATCH_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      DISPATCH_DB_PASSWORD: ${DISPATCH_DB_PASSWORD:-${PGPASSWORD:-}}
+      DISPATCH_FLYWAY_USER: ${DISPATCH_FLYWAY_USER:-${DISPATCH_DB_USERNAME:-${PGUSER:-neondb_owner}}}
+      DISPATCH_FLYWAY_PASSWORD: ${DISPATCH_FLYWAY_PASSWORD:-${DISPATCH_DB_PASSWORD:-${PGPASSWORD:-}}}
+      SPRING_DATASOURCE_URL: ${DISPATCH_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/dispatcherdb?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${DISPATCH_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${DISPATCH_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  courier-service:
+    build:
+      context: ./services/courier-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-courier-service
+    ports:
+      - "127.0.0.1:${COURIER_SERVICE_PORT:-8086}:8086"
+    environment:
+      SERVER_PORT: 8086
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
+      PGPORT: ${PGPORT:-5432}
+      PGDATABASE: ${COURIER_DB_NAME:-courier_db}
+      PGUSER: ${COURIER_DB_USER:-${PGUSER:-neondb_owner}}
+      PGPASSWORD: ${COURIER_DB_PASSWORD:-${PGPASSWORD:-}}
+      PGSSLMODE: ${PGSSLMODE:-require}
+      COURIER_DB_URL: ${COURIER_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/courier_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      COURIER_DB_USERNAME: ${COURIER_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      COURIER_DB_PASSWORD: ${COURIER_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_DATASOURCE_URL: ${COURIER_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/courier_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${COURIER_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${COURIER_DB_PASSWORD:-${PGPASSWORD:-}}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8086/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  tracking-service:
+    build:
+      context: ./services/tracking-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-tracking-service
+    ports:
+      - "127.0.0.1:${TRACKING_SERVICE_PORT:-8087}:8087"
+    environment:
+      SERVER_PORT: 8087
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
+      PGPORT: ${PGPORT:-5432}
+      TRACKING_DB_NAME: ${TRACKING_DB_NAME:-tracking_db}
+      TRACKING_DB_URL: ${TRACKING_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/tracking_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      TRACKING_DB_USERNAME: ${TRACKING_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      TRACKING_DB_PASSWORD: ${TRACKING_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_DATASOURCE_URL: ${TRACKING_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/tracking_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${TRACKING_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${TRACKING_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8087/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-notification-service
+    ports:
+      - "127.0.0.1:${NOTIFICATION_SERVICE_PORT:-8088}:8088"
+    environment:
+      SERVER_PORT: 8088
+      PGHOST: ${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}
+      PGPORT: ${PGPORT:-5432}
+      NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+      NOTIFICATION_DB_URL: ${NOTIFICATION_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/notification_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_DATASOURCE_URL: ${NOTIFICATION_DB_URL:-jdbc:postgresql://${PGHOST:-ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech}:${PGPORT:-5432}/notification_db?sslmode=${PGSSLMODE:-require}&channel_binding=require}
+      SPRING_DATASOURCE_USERNAME: ${NOTIFICATION_DB_USERNAME:-${PGUSER:-neondb_owner}}
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-${PGPASSWORD:-}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      NOTIFICATION_SIMULATION_MODE: "true"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8088/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - swiftdrop-network
+
+  reporting-service:
+    build:
+      context: ./services/reporting-service
+      dockerfile: Dockerfile
+    container_name: swiftdrop-reporting-service
+    ports:
+      - "127.0.0.1:${REPORTING_SERVICE_PORT:-8090}:8090"
+    environment:
+      SERVER_PORT: 8090
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      SERVICES_AUTH_URL: http://auth-service:8081
+      SERVICES_PARCEL_URL: http://parcel-service:8082
+      SERVICES_PRICING_URL: http://pricing-service:8083
+      SERVICES_MERCHANT_URL: http://merchant-service:8084
+      SERVICES_DISPATCH_URL: http://dispatch-service:8085
+      SERVICES_COURIER_URL: http://courier-service:8086
+    depends_on:
+      - auth-service
+      - parcel-service
+      - dispatch-service
+      - courier-service
+      - merchant-service
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8090/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - swiftdrop-network
 
@@ -151,10 +372,34 @@ services:
       PARCEL_SERVICE_URL: http://parcel-service:8082
       COURIER_SERVICE_URL: http://courier-service:8086
       PRICING_SERVICE_URL: http://pricing-service:8083
+      TRACKING_SERVICE_URL: http://tracking-service:8087
+      NOTIFICATION_SERVICE_URL: http://notification-service:8088
+      REPORTING_SERVICE_URL: http://reporting-service:8090
+      SERVICES_MERCHANT_URL: http://merchant-service:8084
+      SERVICES_DISPATCH_URL: http://dispatch-service:8085
+      SERVICES_AUTH_URL: http://auth-service:8081
+      SERVICES_PARCEL_URL: http://parcel-service:8082
+      SERVICES_COURIER_URL: http://courier-service:8086
+      SERVICES_PRICING_URL: http://pricing-service:8083
+      SERVICES_TRACKING_URL: http://tracking-service:8087
+      SERVICES_NOTIFICATION_URL: http://notification-service:8088
+      SERVICES_REPORTING_URL: http://reporting-service:8090
     depends_on:
       - auth-service
       - merchant-service
       - dispatch-service
+      - parcel-service
+      - courier-service
+      - pricing-service
+      - tracking-service
+      - notification-service
+      - reporting-service
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - swiftdrop-network
 
@@ -164,11 +409,20 @@ services:
       dockerfile: Dockerfile
     container_name: swiftdrop-frontend
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
     depends_on:
       - api-gateway
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - swiftdrop-network
+
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   swiftdrop-network:

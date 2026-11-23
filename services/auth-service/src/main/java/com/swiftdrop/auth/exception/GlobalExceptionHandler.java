@@ -31,18 +31,53 @@ public class GlobalExceptionHandler {
         return errorResponse(HttpStatus.BAD_REQUEST, message);
     }
 
-    // ── Business-rule errors (duplicate email, bad credentials) ─
+    // ── Account deactivated ───────────────────────────────────
+
+    @ExceptionHandler(AccountDeactivatedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountDeactivated(
+            AccountDeactivatedException ex) {
+        return errorResponse(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    // ── Google OAuth token validation failure ────────────────
+    @ExceptionHandler(GoogleTokenValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleGoogleTokenValidation(
+            GoogleTokenValidationException ex) {
+        return errorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    // ── Missing configuration or illegal state ─────────────────
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(
+            IllegalStateException ex) {
+        return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
+    // ── Resource not found ─────────────────────────────────────
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(
+            ResourceNotFoundException ex) {
+        return errorResponse(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+
+    // ── Business-rule errors (duplicate email, bad credentials, illegal actions) ─
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(
             IllegalArgumentException ex) {
 
-        // Map specific messages to appropriate HTTP status codes
-        HttpStatus status = ex.getMessage().contains("already registered")
-                ? HttpStatus.CONFLICT
-                : HttpStatus.UNAUTHORIZED;
+        String msg = ex.getMessage() != null ? ex.getMessage() : "Invalid argument";
+        HttpStatus status;
+        if (msg.contains("already registered")) {
+            status = HttpStatus.CONFLICT;
+        } else if (msg.contains("cannot") || msg.contains("Invalid role") || msg.contains("required")) {
+            status = HttpStatus.BAD_REQUEST;
+        } else {
+            status = HttpStatus.UNAUTHORIZED;
+        }
 
-        return errorResponse(status, ex.getMessage());
+        return errorResponse(status, msg);
     }
 
     // ── Catch-all — do not expose internal details ─────────────

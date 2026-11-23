@@ -36,6 +36,7 @@ public class MerchantAuditLog {
     private String performedByRole;
 
     @Column(name = "details", columnDefinition = "jsonb")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private String details;
 
     @Column(name = "ip_address", length = 45)

@@ -39,6 +39,15 @@ public class User {
     @Column(name = "role", nullable = false)
     private Role role;
 
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
+
+    @Column(name = "provider", nullable = false)
+    private String provider = "local";
+
+    @Column(name = "provider_id")
+    private String providerId;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -49,6 +58,9 @@ public class User {
         }
         if (this.createdAt == null) {
             this.createdAt = LocalDateTime.now();
+        }
+        if (this.provider == null || this.provider.isBlank()) {
+            this.provider = "local";
         }
     }
 
@@ -62,6 +74,29 @@ public class User {
         this.password = password;
         this.phone = phone;
         this.role = role;
+        this.active = true;
+        this.provider = "local";
+    }
+
+    public User(String name, String email, String password, String phone, Role role, boolean active) {
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.phone = phone;
+        this.role = role;
+        this.active = active;
+        this.provider = "local";
+    }
+
+    public User(String name, String email, String password, String phone, Role role, boolean active, String provider, String providerId) {
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.phone = phone;
+        this.role = role;
+        this.active = active;
+        this.provider = provider != null ? provider : "local";
+        this.providerId = providerId;
     }
 
     // ── Getters & Setters ────────────────────────────────────
@@ -83,6 +118,16 @@ public class User {
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
 
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
+
+    public String getProviderId() { return providerId; }
+    public void setProviderId(String providerId) { this.providerId = providerId; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
 }
+
 

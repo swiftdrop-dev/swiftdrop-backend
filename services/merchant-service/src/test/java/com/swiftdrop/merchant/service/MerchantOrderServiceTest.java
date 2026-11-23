@@ -1,171 +1,309 @@
 package com.swiftdrop.merchant.service;
-import com.swiftdrop.merchant.*;
-import com.swiftdrop.merchant.client.*;
-import com.swiftdrop.merchant.client.dto.*;
-import com.swiftdrop.merchant.dto.request.*;
+
+import com.swiftdrop.merchant.client.ParcelServiceClient;
+import com.swiftdrop.merchant.client.PricingServiceClient;
+import com.swiftdrop.merchant.dto.request.BulkMerchantOrderRequest;
+import com.swiftdrop.merchant.dto.request.MerchantOrderAddressRequest;
+import com.swiftdrop.merchant.dto.request.MerchantOrderCreateRequest;
+import com.swiftdrop.merchant.dto.request.MerchantRecipientRequest;
+import com.swiftdrop.merchant.dto.response.BulkMerchantOrderResponse;
+import com.swiftdrop.merchant.dto.response.MerchantOrderPageResponse;
 import com.swiftdrop.merchant.dto.response.MerchantOrderResponse;
-import com.swiftdrop.merchant.entity.*;
-import com.swiftdrop.merchant.exception.MerchantOrderException;
-import com.swiftdrop.merchant.idempotency.*;
-import com.swiftdrop.merchant.mapper.MerchantOrderMapper;
-import com.swiftdrop.merchant.repository.MerchantOrderRequestRepository;
-import com.swiftdrop.merchant.security.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.validation.*;
-import org.springframework.dao.DataIntegrityViolationException;
-import java.sql.SQLException;
-import java.time.Clock;
+import com.swiftdrop.merchant.entity.Merchant;
+import com.swiftdrop.merchant.entity.MerchantApiCredential;
+import com.swiftdrop.merchant.entity.MerchantOrder;
+import com.swiftdrop.merchant.entity.enums.MerchantStatus;
+import com.swiftdrop.merchant.exception.ResourceNotFoundException;
+import com.swiftdrop.merchant.exception.UnauthenticatedException;
+import com.swiftdrop.merchant.exception.UnauthorizedException;
+import com.swiftdrop.merchant.repository.MerchantOrderRepository;
+import com.swiftdrop.merchant.repository.MerchantRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import org.junit.jupiter.api.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
 class MerchantOrderServiceTest {
-    static ValidatorFactory factory; ParcelClient client; MerchantOrderIdempotencyService idem; MerchantOrderService service;
-    VerifiedMerchantOrderAccess actor; MerchantOrderRequest record; ParcelResponse parcel;
-    @BeforeAll static void validators() { factory=Validation.buildDefaultValidatorFactory(); }
-    @AfterAll static void close() { factory.close(); }
-    @BeforeEach void setup() {
-        client=mock(ParcelClient.class); idem=mock(MerchantOrderIdempotencyService.class);
-        actor=new VerifiedMerchantOrderAccess(new VerifiedMerchantApiCredential(UUID.randomUUID(),UUID.randomUUID(),Set.of("orders:write","orders:read")));
-        record=new MerchantOrderRequest(actor.credential().merchantId(),actor.credential().credentialId(),"digest","fingerprint",Instant.now());
-        parcel=OrderTestData.response(actor.credential().merchantId(),OrderTestData.PARCEL_ID);
-        when(idem.claim(eq(actor.credential()),anyString(),anyString())).thenReturn(new MerchantOrderClaim(record,false));
-        when(client.createMerchantParcel(eq(actor.credential().merchantId()),eq(record.downstreamRequestId()),any())).thenReturn(parcel);
-        var json=new ObjectMapper().findAndRegisterModules();
-        service=new MerchantOrderService(client,idem,new MerchantOrderRequestFingerprint(json),new MerchantOrderReplayCodec(json),new MerchantOrderMapper(factory.getValidator()),factory.getValidator());
-    }
-    @Test void createUsesVerifiedOwnerAndStableDownstreamId() { assertEquals(parcel.order(),service.create(actor,"key",OrderTestData.request())); verify(idem).complete(eq(record.id()),eq(record.attemptToken()),eq(201),anyString(),eq(parcel.order().id()),eq("/api/v1/merchant/orders/"+parcel.order().id()),isNull()); }
-    @Test void completedReplayDoesNotCallParcelService() {
-        record.complete(record.attemptToken(),201,new MerchantOrderReplayCodec(new ObjectMapper().findAndRegisterModules()).encode(parcel.order()),parcel.order().id(),"location",null,Instant.now());
-        when(idem.claim(eq(actor.credential()),anyString(),anyString())).thenReturn(new MerchantOrderClaim(record,true));
-        assertEquals(parcel.order(),service.create(actor,"key",OrderTestData.request())); verifyNoInteractions(client);
-    }
-    @Test void simultaneousFirstClaimsReturnOneCreateAndOneInProgressThenReplay() throws Exception {
-        var repository = mock(MerchantOrderRequestRepository.class);
-        var winningRow = new AtomicReference<MerchantOrderRequest>();
-        var reads = new AtomicInteger();
-        var initialReads = new CyclicBarrier(2);
-        var releaseParcel = new CountDownLatch(1);
-        var request = OrderTestData.request();
-        var json = new ObjectMapper().findAndRegisterModules();
-        var fingerprints = new MerchantOrderRequestFingerprint(json);
-        var realIdempotency = new MerchantOrderIdempotencyService(repository, Clock.systemUTC());
-        var orderService = new MerchantOrderService(client, realIdempotency, fingerprints,
-                new MerchantOrderReplayCodec(json), new MerchantOrderMapper(factory.getValidator()), factory.getValidator());
 
-        when(repository.lockRequest(actor.credential().merchantId(), fingerprints.keyDigest("key")))
-                .thenAnswer(invocation -> {
-                    if (reads.incrementAndGet() <= 2) {
-                        initialReads.await(5, TimeUnit.SECONDS);
-                        return Optional.empty();
-                    }
-                    return Optional.ofNullable(winningRow.get());
+    @Mock
+    private MerchantOrderRepository merchantOrderRepository;
+
+    @Mock
+    private MerchantRepository merchantRepository;
+
+    @Mock
+    private MerchantCredentialService merchantCredentialService;
+
+    @Mock
+    private PricingServiceClient pricingServiceClient;
+
+    @Mock
+    private ParcelServiceClient parcelServiceClient;
+
+    @InjectMocks
+    private MerchantOrderService merchantOrderService;
+
+    private Merchant approvedMerchant;
+    private Merchant pendingMerchant;
+    private MerchantApiCredential validCredential;
+
+    @BeforeEach
+    void setUp() {
+        approvedMerchant = new Merchant();
+        approvedMerchant.setId(UUID.randomUUID());
+        approvedMerchant.setUserId(UUID.randomUUID());
+        approvedMerchant.setBusinessName("Acme Global");
+        approvedMerchant.setStatus(MerchantStatus.APPROVED);
+
+        pendingMerchant = new Merchant();
+        pendingMerchant.setId(UUID.randomUUID());
+        pendingMerchant.setUserId(UUID.randomUUID());
+        pendingMerchant.setBusinessName("Pending Store");
+        pendingMerchant.setStatus(MerchantStatus.UNDER_REVIEW);
+
+        validCredential = new MerchantApiCredential();
+        validCredential.setId(UUID.randomUUID());
+        validCredential.setMerchant(approvedMerchant);
+        validCredential.setIsActive(true);
+    }
+
+    @Test
+    void shouldResolveMerchantWithValidApiKey() {
+        when(merchantCredentialService.findValidCredential("sk_live_12345"))
+                .thenReturn(Optional.of(validCredential));
+
+        Merchant result = merchantOrderService.resolveMerchant("sk_live_12345", null, null);
+        assertNotNull(result);
+        assertEquals(approvedMerchant.getId(), result.getId());
+    }
+
+    @Test
+    void shouldFailResolveWithInvalidApiKey() {
+        when(merchantCredentialService.findValidCredential("sk_live_bad"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(UnauthenticatedException.class, () ->
+                merchantOrderService.resolveMerchant("sk_live_bad", null, null));
+    }
+
+    @Test
+    void shouldFailResolveWithPendingMerchantStatus() {
+        MerchantApiCredential pendingCred = new MerchantApiCredential();
+        pendingCred.setMerchant(pendingMerchant);
+        pendingCred.setIsActive(true);
+
+        when(merchantCredentialService.findValidCredential("sk_live_pending"))
+                .thenReturn(Optional.of(pendingCred));
+
+        assertThrows(UnauthorizedException.class, () ->
+                merchantOrderService.resolveMerchant("sk_live_pending", null, null));
+    }
+
+    @Test
+    void shouldResolveMerchantWithCurrentUserId() {
+        when(merchantRepository.findByUserId(approvedMerchant.getUserId()))
+                .thenReturn(Optional.of(approvedMerchant));
+
+        Merchant result = merchantOrderService.resolveMerchant(null, null, approvedMerchant.getUserId());
+        assertNotNull(result);
+        assertEquals(approvedMerchant.getId(), result.getId());
+    }
+
+    @Test
+    void shouldCreateOrderSuccessfullyAndSave() {
+        MerchantOrderCreateRequest req = new MerchantOrderCreateRequest();
+        req.setMerchantOrderRef("ORD-999");
+        req.setRecipient(new MerchantRecipientRequest("Alice", "+94770000000"));
+        req.setPickupAddress(new MerchantOrderAddressRequest("Pickup St", "Colombo", "Colombo", "10000"));
+        req.setDeliveryAddress(new MerchantOrderAddressRequest("Drop St", "Galle", "Galle", "80000"));
+        req.setWeightKg(new BigDecimal("1.500"));
+        req.setSize("MD");
+        req.setPaymentMethod("COD");
+
+        when(pricingServiceClient.calculateEstimate(any(), any(), any(), any()))
+                .thenReturn(new BigDecimal("450.00"));
+        when(parcelServiceClient.bookParcel(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ParcelServiceClient.BookParcelResult("prc_999", "SWF-2026-999", "CREATED"));
+
+        when(merchantOrderRepository.save(any(MerchantOrder.class)))
+                .thenAnswer(inv -> {
+                    MerchantOrder o = inv.getArgument(0);
+                    o.setId(UUID.randomUUID());
+                    o.setCreatedAt(Instant.now());
+                    o.setUpdatedAt(Instant.now());
+                    return o;
                 });
-        when(repository.saveAndFlush(any(MerchantOrderRequest.class))).thenAnswer(invocation -> {
-            MerchantOrderRequest candidate = invocation.getArgument(0);
-            if (winningRow.compareAndSet(null, candidate) || winningRow.get() == candidate) {
-                return candidate;
-            }
-            throw duplicateClaim();
-        });
-        when(repository.lockById(any())).thenAnswer(invocation -> Optional.of(winningRow.get()));
-        when(client.createMerchantParcel(eq(actor.credential().merchantId()), any(), any()))
-                .thenAnswer(invocation -> {
-                    assertTrue(releaseParcel.await(10, TimeUnit.SECONDS));
-                    return parcel;
+
+        MerchantOrderResponse response = merchantOrderService.createOrder(approvedMerchant, req, "idemp-key-1");
+        assertNotNull(response);
+        assertEquals("ORD-999", response.merchantOrderRef());
+        assertEquals("SWF-2026-999", response.trackingNumber());
+        assertEquals("prc_999", response.parcelId());
+        assertEquals(new BigDecimal("450.00"), response.totalFee());
+        verify(merchantOrderRepository).save(any(MerchantOrder.class));
+    }
+
+    @Test
+    void shouldReturnExistingOrderWhenIdempotencyKeyMatches() {
+        MerchantOrder existing = new MerchantOrder();
+        existing.setId(UUID.randomUUID());
+        existing.setMerchant(approvedMerchant);
+        existing.setMerchantOrderRef("ORD-EXISTING");
+        existing.setTrackingNumber("SWF-2026-EXISTING");
+        existing.setParcelId("prc_existing");
+        existing.setStatus("CREATED");
+        existing.setRecipientName("Bob");
+        existing.setRecipientPhone("+94771111111");
+        existing.setRecipientAddress("Drop St");
+        existing.setPickupAddress("Pickup St");
+        existing.setWeightKg(new BigDecimal("1.000"));
+        existing.setParcelSize("STANDARD");
+        existing.setPaymentMethod("COD");
+        existing.setDeliveryFee(new BigDecimal("350.00"));
+        existing.setTotalFee(new BigDecimal("350.00"));
+        existing.setCurrency("LKR");
+        existing.setCreatedAt(Instant.now());
+        existing.setUpdatedAt(Instant.now());
+
+        when(merchantOrderRepository.findByMerchantIdAndIdempotencyKey(approvedMerchant.getId(), "existing-key"))
+                .thenReturn(Optional.of(existing));
+
+        MerchantOrderCreateRequest req = new MerchantOrderCreateRequest();
+        req.setMerchantOrderRef("ORD-EXISTING");
+        req.setWeightKg(BigDecimal.ONE);
+
+        MerchantOrderResponse response = merchantOrderService.createOrder(approvedMerchant, req, "existing-key");
+        assertNotNull(response);
+        assertEquals("ORD-EXISTING", response.merchantOrderRef());
+        verify(parcelServiceClient, never()).bookParcel(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldHandleBulkOrdersWithPartialFailures() {
+        MerchantOrderCreateRequest req1 = new MerchantOrderCreateRequest();
+        req1.setMerchantOrderRef("ORD-BULK-1");
+        req1.setWeightKg(new BigDecimal("1.0"));
+
+        MerchantOrderCreateRequest req2 = new MerchantOrderCreateRequest();
+        req2.setMerchantOrderRef("ORD-BULK-2");
+        req2.setWeightKg(new BigDecimal("2.0"));
+
+        when(pricingServiceClient.calculateEstimate(any(), any(), any(), any()))
+                .thenReturn(new BigDecimal("350.00"))
+                .thenThrow(new RuntimeException("Pricing service down"));
+
+        when(parcelServiceClient.bookParcel(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ParcelServiceClient.BookParcelResult("prc_1", "SWF-1", "CREATED"));
+
+        when(merchantOrderRepository.save(any(MerchantOrder.class)))
+                .thenAnswer(inv -> {
+                    MerchantOrder o = inv.getArgument(0);
+                    o.setId(UUID.randomUUID());
+                    o.setCreatedAt(Instant.now());
+                    o.setUpdatedAt(Instant.now());
+                    return o;
                 });
 
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            var requests = new ExecutorCompletionService<MerchantOrderResponse>(executor);
-            requests.submit(() -> orderService.create(actor, "key", request));
-            requests.submit(() -> orderService.create(actor, "key", request));
-            try {
-                var first = requests.poll(10, TimeUnit.SECONDS);
-                assertNotNull(first);
-                var failure = assertThrows(ExecutionException.class, first::get);
-                var conflict = assertInstanceOf(MerchantOrderException.class, failure.getCause());
-                assertEquals(409, conflict.getStatus());
-                assertEquals("REQUEST_IN_PROGRESS", conflict.getCode());
-            } finally {
-                releaseParcel.countDown();
-            }
-            var second = requests.poll(10, TimeUnit.SECONDS);
-            assertNotNull(second);
-            assertEquals(parcel.order(), second.get());
-        }
-        assertEquals(parcel.order(), orderService.create(actor, "key", request));
-        verify(client).createMerchantParcel(eq(actor.credential().merchantId()),
-                eq(winningRow.get().downstreamRequestId()), any());
+        BulkMerchantOrderRequest bulkReq = new BulkMerchantOrderRequest(List.of(req1, req2));
+        BulkMerchantOrderResponse bulkResponse = merchantOrderService.createBulkOrders(approvedMerchant, bulkReq);
+
+        assertNotNull(bulkResponse);
+        assertEquals(2, bulkResponse.getTotalCount());
+        assertEquals(1, bulkResponse.getSuccessCount());
+        assertEquals(1, bulkResponse.getFailureCount());
+        assertFalse(bulkResponse.isSuccess());
+        assertEquals(1, bulkResponse.getSuccessfulOrders().size());
+        assertEquals(1, bulkResponse.getFailedOrders().size());
     }
 
-    @Test void duplicateClaimCanReplayWinnerThatCompletedBeforeReread() {
-        record.complete(record.attemptToken(), 201,
-                new MerchantOrderReplayCodec(new ObjectMapper().findAndRegisterModules()).encode(parcel.order()),
-                parcel.order().id(), "/api/v1/merchant/orders/" + parcel.order().id(), null, Instant.now());
-        when(idem.claim(eq(actor.credential()), anyString(), anyString())).thenThrow(duplicateClaim());
-        when(idem.claimExisting(eq(actor.credential()), anyString(), anyString()))
-                .thenReturn(Optional.of(new MerchantOrderClaim(record, true)));
+    @Test
+    void shouldListOrders() {
+        MerchantOrder order = new MerchantOrder();
+        order.setId(UUID.randomUUID());
+        order.setMerchant(approvedMerchant);
+        order.setMerchantOrderRef("ORD-LIST");
+        order.setTrackingNumber("SWF-LIST");
+        order.setParcelId("prc_list");
+        order.setStatus("CREATED");
+        order.setRecipientName("Bob");
+        order.setRecipientPhone("+94771111111");
+        order.setRecipientAddress("Drop St");
+        order.setPickupAddress("Pickup St");
+        order.setWeightKg(BigDecimal.ONE);
+        order.setParcelSize("STANDARD");
+        order.setPaymentMethod("COD");
+        order.setDeliveryFee(new BigDecimal("350.00"));
+        order.setTotalFee(new BigDecimal("350.00"));
+        order.setCurrency("LKR");
+        order.setCreatedAt(Instant.now());
+        order.setUpdatedAt(Instant.now());
 
-        assertEquals(parcel.order(), service.create(actor, "key", OrderTestData.request()));
-        verifyNoInteractions(client);
+        PageImpl<MerchantOrder> page = new PageImpl<>(List.of(order), PageRequest.of(0, 20), 1);
+        when(merchantOrderRepository.findByMerchantIdOrderByCreatedAtDesc(eq(approvedMerchant.getId()), any(Pageable.class)))
+                .thenReturn(page);
+        lenient().when(merchantOrderRepository.searchOrders(eq(approvedMerchant.getId()), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(page);
+
+        MerchantOrderPageResponse response = merchantOrderService.listOrders(
+                approvedMerchant, null, null, null, null, null, PageRequest.of(0, 20));
+        assertNotNull(response);
+        assertEquals(1, response.getTotal());
+        assertEquals(1, response.getData().size());
     }
 
-    private static DataIntegrityViolationException duplicateClaim() {
-        return new DataIntegrityViolationException("duplicate claim", new SQLException("constraint detail", "23505"));
+    @Test
+    void shouldGetOrderByIdentifier() {
+        MerchantOrder order = new MerchantOrder();
+        order.setId(UUID.randomUUID());
+        order.setMerchant(approvedMerchant);
+        order.setMerchantOrderRef("ORD-FIND");
+        order.setTrackingNumber("SWF-FIND");
+        order.setParcelId("prc_find");
+        order.setStatus("CREATED");
+        order.setRecipientName("Bob");
+        order.setRecipientPhone("+94771111111");
+        order.setRecipientAddress("Drop St");
+        order.setPickupAddress("Pickup St");
+        order.setWeightKg(BigDecimal.ONE);
+        order.setParcelSize("STANDARD");
+        order.setPaymentMethod("COD");
+        order.setDeliveryFee(new BigDecimal("350.00"));
+        order.setTotalFee(new BigDecimal("350.00"));
+        order.setCurrency("LKR");
+        order.setCreatedAt(Instant.now());
+        order.setUpdatedAt(Instant.now());
+
+        when(merchantOrderRepository.findByMerchantIdAndTrackingNumber(approvedMerchant.getId(), "SWF-FIND"))
+                .thenReturn(Optional.of(order));
+
+        MerchantOrderResponse response = merchantOrderService.getOrder(approvedMerchant, "SWF-FIND");
+        assertNotNull(response);
+        assertEquals("ORD-FIND", response.merchantOrderRef());
     }
-    @Test void uncertainNeverRetries() {
-        record.uncertain(record.attemptToken(),Instant.now()); when(idem.claim(eq(actor.credential()),anyString(),anyString())).thenReturn(new MerchantOrderClaim(record,true));
-        assertEquals("OUTCOME_UNCERTAIN",assertThrows(MerchantOrderException.class,()->service.create(actor,"key",OrderTestData.request())).getCode()); verifyNoInteractions(client);
-    }
-    @Test void timeoutRecordsUncertaintyWithoutRetry() {
-        when(client.createMerchantParcel(any(),any(),any())).thenThrow(new ParcelClientException(504,false));
-        assertEquals(504,assertThrows(MerchantOrderException.class,()->service.create(actor,"key",OrderTestData.request())).getStatus());
-        verify(idem).uncertain(record.id(),record.attemptToken()); verify(client,times(1)).createMerchantParcel(any(),any(),any());
-    }
-    @Test void definitiveRejectionIsPersistedAndReplayed() {
-        when(client.createMerchantParcel(any(),any(),any())).thenThrow(new ParcelClientException(422,true));
-        assertEquals(422,assertThrows(MerchantOrderException.class,()->service.create(actor,"key",OrderTestData.request())).getStatus());
-        verify(idem).complete(record.id(),record.attemptToken(),422,null,null,null,"PARCEL_REQUEST_REJECTED");
-        record.complete(record.attemptToken(),422,null,null,null,"PARCEL_REQUEST_REJECTED",Instant.now());
-        when(idem.claim(eq(actor.credential()),anyString(),anyString())).thenReturn(new MerchantOrderClaim(record,true)); reset(client);
-        assertEquals(422,assertThrows(MerchantOrderException.class,()->service.create(actor,"key",OrderTestData.request())).getStatus()); verifyNoInteractions(client);
-    }
-    @Test void ownershipMismatchIsNotDisclosed() {
-        when(client.getMerchantParcel(any(),any())).thenReturn(OrderTestData.response(UUID.randomUUID(),parcel.order().id()));
-        assertEquals(502,assertThrows(MerchantOrderException.class,()->service.detail(actor,parcel.order().id())).getStatus());
-    }
-    @Test void missingOwnedOrderIs404() { when(client.getMerchantParcel(any(),any())).thenThrow(new ParcelClientException(404,false)); assertEquals(404,assertThrows(MerchantOrderException.class,()->service.detail(actor,OrderTestData.PARCEL_ID)).getStatus()); }
-    @Test void invalidParcelIdsNeverReachM2() {
-        for (String id : List.of("", "prc with spaces", "../other", "x".repeat(65))) {
-            assertEquals(400,assertThrows(MerchantOrderException.class,()->service.detail(actor,id)).getStatus());
-        }
-        verifyNoInteractions(client);
-    }
-    @Test void readWriteScopesAreIndependent() {
-        var readOnly=new VerifiedMerchantOrderAccess(new VerifiedMerchantApiCredential(actor.credential().merchantId(),actor.credential().credentialId(),Set.of("orders:read")));
-        var writeOnly=new VerifiedMerchantOrderAccess(new VerifiedMerchantApiCredential(actor.credential().merchantId(),actor.credential().credentialId(),Set.of("orders:write")));
-        assertEquals(403,assertThrows(MerchantOrderException.class,()->service.create(readOnly,"key",OrderTestData.request())).getStatus());
-        assertEquals(403,assertThrows(MerchantOrderException.class,()->service.detail(writeOnly,OrderTestData.PARCEL_ID)).getStatus()); verifyNoInteractions(client,idem);
-    }
-    @Test void invalidPaginationAndFiltersNeverReachM2() {
-        for (var query:List.of(new MerchantOrderQuery(-1,20,null,null,null,null,null),new MerchantOrderQuery(0,101,null,null,null,null,null),new MerchantOrderQuery(0,20,"INVALID",null,null,null,null),new MerchantOrderQuery(0,20,null,null,null,Instant.now(),Instant.EPOCH)))
-            assertThrows(MerchantOrderException.class,()->service.list(actor,query));
-        verifyNoInteractions(client);
-    }
-    @Test void listDelegatesMerchantFiltersAndPagination() {
-        var query=new MerchantOrderQuery(0,20,"PENDING","REF-1",null,null,null);
-        when(client.listMerchantParcels(actor.credential().merchantId(),query)).thenReturn(new ParcelPageResponse(List.of(parcel),1,0,20));
-        assertEquals(1,service.list(actor,query).total()); verify(client).listMerchantParcels(actor.credential().merchantId(),query);
-    }
-    @Test void invalidRequestAndIdempotencyKeyDoNotClaim() {
-        assertThrows(MerchantOrderException.class,()->service.create(actor," ",OrderTestData.request())); assertThrows(MerchantOrderException.class,()->service.create(actor,"key",null)); verifyNoInteractions(idem,client);
-    }
-    @Test void failurePersistingOutcomeCannotTriggerResend() {
-        doThrow(new IllegalStateException("database unavailable")).when(idem).complete(any(),any(),anyInt(),any(),any(),any(),any());
-        assertThrows(IllegalStateException.class,()->service.create(actor,"key",OrderTestData.request())); verify(client,times(1)).createMerchantParcel(any(),any(),any());
+
+    @Test
+    void shouldThrowWhenOrderNotFound() {
+        when(merchantOrderRepository.findByMerchantIdAndTrackingNumber(approvedMerchant.getId(), "NON_EXIST"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                merchantOrderService.getOrder(approvedMerchant, "NON_EXIST"));
     }
 }

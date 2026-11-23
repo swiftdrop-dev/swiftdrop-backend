@@ -39,8 +39,9 @@ public class ParcelServiceClient {
                     ex.getMessage(), trackingNumber);
             
             return ParcelResponseDto.builder()
-                    .id(101L)
+                    .id("101")
                     .trackingNumber(trackingNumber != null ? trackingNumber : "SWD-98234-LK")
+                    .senderId("cust_default")
                     .senderName("Kamal Silva (Colombo Store)")
                     .senderPhone("+94 77 123 4567")
                     .senderAddress("45 Galle Road, Colombo 03")

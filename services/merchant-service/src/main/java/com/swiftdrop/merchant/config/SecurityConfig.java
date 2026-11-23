@@ -1,7 +1,6 @@
 package com.swiftdrop.merchant.config;
 
 import com.swiftdrop.merchant.security.JwtAuthenticationFilter;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -27,13 +26,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    public FilterRegistrationBean<JwtAuthenticationFilter> jwtServletRegistration() {
-        var registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
-        registration.setEnabled(false);
-        return registration;
-    }
-
-    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -54,10 +46,12 @@ public class SecurityConfig {
                         .hasAnyRole("CUSTOMER", "MERCHANT")
                         .requestMatchers("/api/v1/merchants/onboarding/me").hasRole("MERCHANT")
                         .requestMatchers("/api/v1/merchants/onboarding/**").hasAnyRole("MERCHANT", "ADMIN")
-                        .requestMatchers("/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/*/credentials", "/api/v1/merchants/*/credentials/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/*/webhooks", "/api/v1/merchants/*/webhooks/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers("/api/v1/merchants/orders", "/api/v1/merchants/orders/**",
+                                         "/api/v1/merchant/orders", "/api/v1/merchant/orders/**").permitAll()
                         // Other endpoints have no approved public or ownership policy yet.
-                        .requestMatchers("/api/v1/merchants/**").denyAll()
-                        .requestMatchers("/api/v1/merchant/orders", "/api/v1/merchant/orders/**").denyAll()
+                        .requestMatchers("/api/v1/merchants/**", "/api/v1/merchant/**").denyAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

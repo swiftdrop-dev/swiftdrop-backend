@@ -168,11 +168,16 @@ public class DispatchJobService {
                 saved.getId().toString(),
                 "DispatchJobAssignedEvent",
                 toJson(Map.of(
+                        "eventId", UUID.randomUUID().toString(),
+                        "eventType", "DISPATCH_ASSIGNED",
+                        "eventVersion", "1.0",
+                        "occurredAt", now.toString(),
                         "jobId", saved.getId(),
                         "parcelId", saved.getParcelId(),
                         "courierId", courierId,
                         "trackingNumber", saved.getTrackingNumber(),
-                        "offerExpiresAt", expiresAt.toString()
+                        "offerExpiresAt", expiresAt.toString(),
+                        "status", "ASSIGNED_PENDING_ACCEPTANCE"
                 ))
         );
 
@@ -183,6 +188,17 @@ public class DispatchJobService {
     @Transactional
     public DispatchJobResponse handleCourierDecision(UUID jobId, UUID courierId, CourierOfferDecisionRequest request) {
         DispatchJob job = getJobEntity(jobId);
+
+        // Idempotency check: if courier re-submits matching decision, safely return current state
+        if (Boolean.TRUE.equals(request.getAccept()) && job.getStatus() == DispatchStatus.ACCEPTED
+                && courierId.equals(job.getCourierId())) {
+            log.info("Dispatch job {} already accepted by courier {}, returning existing job", jobId, courierId);
+            return dispatchMapper.toJobResponse(job);
+        }
+        if (Boolean.FALSE.equals(request.getAccept()) && job.getStatus() == DispatchStatus.DECLINED) {
+            log.info("Dispatch job {} already declined, returning existing job", jobId);
+            return dispatchMapper.toJobResponse(job);
+        }
 
         if (job.getStatus() != DispatchStatus.ASSIGNED_PENDING_ACCEPTANCE) {
             throw new InvalidDispatchStateException("Job is not awaiting courier decision. Current status: " + job.getStatus());
@@ -233,10 +249,15 @@ public class DispatchJobService {
                     saved.getId().toString(),
                     "DispatchJobAcceptedEvent",
                     toJson(Map.of(
+                            "eventId", UUID.randomUUID().toString(),
+                            "eventType", "COURIER_ACCEPTED",
+                            "eventVersion", "1.0",
+                            "occurredAt", now.toString(),
                             "jobId", saved.getId(),
                             "parcelId", saved.getParcelId(),
                             "courierId", courierId,
-                            "trackingNumber", saved.getTrackingNumber()
+                            "trackingNumber", saved.getTrackingNumber(),
+                            "status", "ASSIGNED"
                     ))
             );
 
@@ -260,9 +281,15 @@ public class DispatchJobService {
                     saved.getId().toString(),
                     "DispatchJobDeclinedEvent",
                     toJson(Map.of(
+                            "eventId", UUID.randomUUID().toString(),
+                            "eventType", "COURIER_DECLINED",
+                            "eventVersion", "1.0",
+                            "occurredAt", now.toString(),
                             "jobId", saved.getId(),
                             "parcelId", saved.getParcelId(),
                             "courierId", courierId,
+                            "trackingNumber", saved.getTrackingNumber(),
+                            "status", "DECLINED",
                             "reason", request.getReason() != null ? request.getReason() : ""
                     ))
             );

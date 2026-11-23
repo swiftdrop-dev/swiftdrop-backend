@@ -1,5 +1,26 @@
 package com.swiftdrop.merchant.dto.request;
-import jakarta.validation.constraints.*;
-public record MerchantOrderAddressRequest(@NotBlank @Size(max=300) String street,
-    @NotBlank @Size(max=100) String city, @NotBlank @Size(max=100) String district,
-    @Size(max=20) String postalCode) {}
+
+public record MerchantOrderAddressRequest(
+        String street,
+        String city,
+        String district,
+        String postalCode
+) {
+    public String toFormattedString() {
+        StringBuilder sb = new StringBuilder();
+        if (street != null && !street.isBlank()) sb.append(street.trim());
+        if (city != null && !city.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(city.trim());
+        }
+        if (district != null && !district.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(district.trim());
+        }
+        if (postalCode != null && !postalCode.isBlank()) {
+            if (!sb.isEmpty()) sb.append(" ");
+            sb.append(postalCode.trim());
+        }
+        return sb.toString();
+    }
+}

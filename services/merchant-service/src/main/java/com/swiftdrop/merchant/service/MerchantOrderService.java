@@ -1,82 +1,333 @@
 package com.swiftdrop.merchant.service;
-import com.swiftdrop.merchant.client.*;
-import com.swiftdrop.merchant.client.dto.*;
-import com.swiftdrop.merchant.dto.ParcelId;
-import com.swiftdrop.merchant.dto.request.*;
-import com.swiftdrop.merchant.dto.response.*;
-import com.swiftdrop.merchant.entity.*;
-import com.swiftdrop.merchant.exception.MerchantOrderException;
-import com.swiftdrop.merchant.idempotency.*;
-import com.swiftdrop.merchant.mapper.MerchantOrderMapper;
-import com.swiftdrop.merchant.security.*;
-import jakarta.validation.Validator;
-import org.springframework.dao.DataIntegrityViolationException;
 
-import java.sql.SQLException;
+import com.swiftdrop.merchant.client.ParcelServiceClient;
+import com.swiftdrop.merchant.client.PricingServiceClient;
+import com.swiftdrop.merchant.dto.request.BulkMerchantOrderRequest;
+import com.swiftdrop.merchant.dto.request.MerchantOrderAddressRequest;
+import com.swiftdrop.merchant.dto.request.MerchantOrderCreateRequest;
+import com.swiftdrop.merchant.dto.request.MerchantRecipientRequest;
+import com.swiftdrop.merchant.dto.response.BulkOrderErrorItem;
+import com.swiftdrop.merchant.dto.response.BulkMerchantOrderResponse;
+import com.swiftdrop.merchant.dto.response.MerchantOrderDetailsDto;
+import com.swiftdrop.merchant.dto.response.MerchantOrderPageResponse;
+import com.swiftdrop.merchant.dto.response.MerchantOrderResponse;
+import com.swiftdrop.merchant.entity.Merchant;
+import com.swiftdrop.merchant.entity.MerchantApiCredential;
+import com.swiftdrop.merchant.entity.MerchantOrder;
+import com.swiftdrop.merchant.entity.enums.MerchantStatus;
+import com.swiftdrop.merchant.exception.ResourceNotFoundException;
+import com.swiftdrop.merchant.exception.UnauthenticatedException;
+import com.swiftdrop.merchant.exception.UnauthorizedException;
+import com.swiftdrop.merchant.repository.MerchantOrderRepository;
+import com.swiftdrop.merchant.repository.MerchantRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-/** Deliberately not transactional: network calls occur between separate coordination transactions. */
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
 public class MerchantOrderService {
-    private final ParcelClient client; private final MerchantOrderIdempotencyService idempotency;
-    private final MerchantOrderRequestFingerprint fingerprint; private final MerchantOrderReplayCodec replay;
-    private final MerchantOrderMapper mapper; private final Validator validator;
-    public MerchantOrderService(ParcelClient client,MerchantOrderIdempotencyService idempotency,MerchantOrderRequestFingerprint fingerprint,
-        MerchantOrderReplayCodec replay,MerchantOrderMapper mapper,Validator validator) {
-        this.client=client; this.idempotency=idempotency; this.fingerprint=fingerprint; this.replay=replay; this.mapper=mapper; this.validator=validator;
+
+    private static final Logger log = LoggerFactory.getLogger(MerchantOrderService.class);
+
+    private final MerchantOrderRepository merchantOrderRepository;
+    private final MerchantRepository merchantRepository;
+    private final MerchantCredentialService merchantCredentialService;
+    private final PricingServiceClient pricingServiceClient;
+    private final ParcelServiceClient parcelServiceClient;
+
+    public MerchantOrderService(
+            MerchantOrderRepository merchantOrderRepository,
+            MerchantRepository merchantRepository,
+            MerchantCredentialService merchantCredentialService,
+            PricingServiceClient pricingServiceClient,
+            ParcelServiceClient parcelServiceClient) {
+        this.merchantOrderRepository = merchantOrderRepository;
+        this.merchantRepository = merchantRepository;
+        this.merchantCredentialService = merchantCredentialService;
+        this.pricingServiceClient = pricingServiceClient;
+        this.parcelServiceClient = parcelServiceClient;
     }
-    public MerchantOrderResponse create(VerifiedMerchantOrderAccess access,String key,MerchantOrderCreateRequest request) {
-        var actor=authorize(access,"orders:write"); validate(request);
-        if (key==null || !key.matches("[A-Za-z0-9._:-]{1,128}")) throw error(400,"INVALID_REQUEST","Valid Idempotency-Key required");
-        var claim=claim(actor,fingerprint.keyDigest(key),fingerprint.fingerprint(request)); var record=claim.request();
-        if (claim.replay()) {
-            if (record.state()==MerchantOrderRequestState.UNCERTAIN) throw error(503,"OUTCOME_UNCERTAIN","Creation outcome requires reconciliation; do not use a new idempotency key");
-            if (record.state()==MerchantOrderRequestState.REJECTED) throw error(record.httpStatus(),record.failureCode(),"Parcel service rejected the request");
-            if (record.state()!=MerchantOrderRequestState.SUCCEEDED) throw error(409,"REQUEST_IN_PROGRESS","Request is being processed");
-            return replay.decode(record.responseVersion(),record.snapshot());
-        }
-        MerchantOrderResponse response;
-        try {
-            response=mapper.order(actor.merchantId(),client.createMerchantParcel(actor.merchantId(),record.downstreamRequestId(),new ParcelCreateRequest(request)));
-            if (!request.merchantOrderRef().equals(response.merchantOrderRef())) throw new ParcelClientException(502,false);
-        } catch (ParcelClientException e) {
-            if (e.definitive()) idempotency.complete(record.id(),record.attemptToken(),e.status(),null,null,null,"PARCEL_REQUEST_REJECTED");
-            else idempotency.uncertain(record.id(),record.attemptToken());
-            throw error(e.status(),e.definitive() ? "PARCEL_REQUEST_REJECTED" : "PARCEL_SERVICE_UNAVAILABLE","Parcel service request failed; retry only with the same idempotency key");
-        } catch (RuntimeException e) {
-            idempotency.uncertain(record.id(),record.attemptToken()); throw error(503,"OUTCOME_UNCERTAIN","Creation outcome requires reconciliation");
-        }
-        // A failed completion leaves IN_PROGRESS; lease expiry becomes UNCERTAIN, never a resend.
-        idempotency.complete(record.id(),record.attemptToken(),201,replay.encode(response),response.id(),"/api/v1/merchant/orders/"+response.id(),null);
-        return response;
-    }
-    private MerchantOrderClaim claim(VerifiedMerchantApiCredential actor, String digest, String requestFingerprint) {
-        try {
-            return idempotency.claim(actor, digest, requestFingerprint);
-        } catch (DataIntegrityViolationException failure) {
-            if (!(failure.getMostSpecificCause() instanceof SQLException sql)
-                    || !"23505".equals(sql.getSQLState())) {
-                throw failure;
+
+    @Transactional(readOnly = true)
+    public Merchant resolveMerchant(String xApiKey, String authorization, UUID currentUserId) {
+        String rawApiKey = null;
+        if (xApiKey != null && !xApiKey.isBlank()) {
+            rawApiKey = xApiKey.trim();
+        } else if (authorization != null) {
+            String trimmed = authorization.trim();
+            if (trimmed.startsWith("ApiKey ")) {
+                rawApiKey = trimmed.substring(7).trim();
+            } else if (trimmed.startsWith("Bearer sk_")) {
+                rawApiKey = trimmed.substring(7).trim();
             }
-            // The REQUIRES_NEW claim has rolled back before we lock and read the winner.
-            return idempotency.claimExisting(actor, digest, requestFingerprint).orElseThrow(() -> failure);
+        }
+
+        if (rawApiKey != null && !rawApiKey.isBlank()) {
+            Optional<MerchantApiCredential> credOpt = merchantCredentialService.findValidCredential(rawApiKey);
+            if (credOpt.isEmpty()) {
+                throw new UnauthenticatedException("Invalid, expired, or revoked API key");
+            }
+            Merchant merchant = credOpt.get().getMerchant();
+            verifyMerchantApproved(merchant);
+            return merchant;
+        }
+
+        if (currentUserId != null) {
+            Merchant merchant = merchantRepository.findByUserId(currentUserId)
+                    .orElseThrow(() -> new UnauthenticatedException("No merchant profile associated with authenticated user"));
+            verifyMerchantApproved(merchant);
+            return merchant;
+        }
+
+        throw new UnauthenticatedException("Authentication required: provide an X-API-Key or Bearer token");
+    }
+
+    private void verifyMerchantApproved(Merchant merchant) {
+        if (merchant.getStatus() != MerchantStatus.APPROVED && merchant.getStatus() != MerchantStatus.ACTIVE) {
+            throw new UnauthorizedException("Merchant account is not active or approved (current status: "
+                    + merchant.getStatus() + ")");
         }
     }
-    public MerchantOrderPageResponse list(VerifiedMerchantOrderAccess access,MerchantOrderQuery query) {
-        var actor=authorize(access,"orders:read"); validate(query);
-        try { return mapper.page(actor.merchantId(),client.listMerchantParcels(actor.merchantId(),query),query); }
-        catch (ParcelClientException e) { throw error(e.status(),"PARCEL_SERVICE_UNAVAILABLE","Parcel service request failed"); }
+
+    @Transactional
+    public MerchantOrderResponse createOrder(Merchant merchant, MerchantOrderCreateRequest request, String idempotencyKey) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<MerchantOrder> existingByIdempotency = merchantOrderRepository
+                    .findByMerchantIdAndIdempotencyKey(merchant.getId(), idempotencyKey.trim());
+            if (existingByIdempotency.isPresent()) {
+                log.info("Idempotent order playback for merchant [{}] and key [{}]", merchant.getId(), idempotencyKey);
+                return toResponse(existingByIdempotency.get());
+            }
+        }
+
+        if (request.getMerchantOrderRef() != null && !request.getMerchantOrderRef().isBlank()) {
+            Optional<MerchantOrder> existingByRef = merchantOrderRepository
+                    .findByMerchantIdAndMerchantOrderRef(merchant.getId(), request.getMerchantOrderRef().trim());
+            if (existingByRef.isPresent()) {
+                log.info("Existing order reference [{}] returned for merchant [{}]",
+                        request.getMerchantOrderRef(), merchant.getId());
+                return toResponse(existingByRef.get());
+            }
+        }
+
+        BigDecimal calculatedFee = pricingServiceClient.calculateEstimate(
+                request.getWeightKg(),
+                request.getEffectivePickupCity(),
+                request.getEffectiveDeliveryCity(),
+                request.getEffectiveSize()
+        );
+
+        String senderId = merchant.getUserId() != null ? merchant.getUserId().toString() : merchant.getId().toString();
+        ParcelServiceClient.BookParcelResult bookResult = parcelServiceClient.bookParcel(
+                senderId,
+                request.getEffectiveRecipientName(),
+                request.getEffectiveRecipientPhone(),
+                request.getEffectiveDeliveryAddress(),
+                request.getEffectivePickupAddress(),
+                request.getDescription(),
+                request.getWeightKg(),
+                request.getEffectiveSize(),
+                request.getEffectiveFragile(),
+                request.getEffectivePaymentMethod(),
+                calculatedFee
+        );
+
+        MerchantOrder order = new MerchantOrder();
+        order.setMerchant(merchant);
+        order.setMerchantOrderRef(request.getMerchantOrderRef() != null && !request.getMerchantOrderRef().isBlank()
+                ? request.getMerchantOrderRef().trim()
+                : "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        order.setTrackingNumber(bookResult.trackingNumber());
+        order.setParcelId(bookResult.parcelId());
+        order.setStatus(bookResult.status());
+        order.setRecipientName(request.getEffectiveRecipientName());
+        order.setRecipientPhone(request.getEffectiveRecipientPhone());
+        order.setRecipientAddress(request.getEffectiveDeliveryAddress());
+        order.setRecipientCity(request.getEffectiveDeliveryCity());
+        order.setRecipientDistrict(request.getEffectiveDeliveryDistrict());
+        order.setRecipientPostalCode(request.getDeliveryAddress() != null ? request.getDeliveryAddress().postalCode() : null);
+        order.setPickupAddress(request.getEffectivePickupAddress());
+        order.setPickupCity(request.getEffectivePickupCity());
+        order.setPickupDistrict(request.getEffectivePickupDistrict());
+        order.setPickupPostalCode(request.getPickupAddress() != null ? request.getPickupAddress().postalCode() : null);
+        order.setDescription(request.getDescription());
+        order.setWeightKg(request.getWeightKg());
+        order.setParcelSize(request.getEffectiveSize());
+        order.setDeclaredValue(request.getDeclaredValue());
+        order.setFragile(request.getEffectiveFragile());
+        order.setSpecialInstructions(request.getSpecialInstructions());
+        order.setPaymentMethod(request.getEffectivePaymentMethod());
+        order.setDeliveryFee(calculatedFee);
+        order.setTotalFee(calculatedFee);
+        order.setCurrency("LKR");
+        order.setIdempotencyKey(idempotencyKey != null && !idempotencyKey.isBlank() ? idempotencyKey.trim() : null);
+
+        MerchantOrder saved = merchantOrderRepository.save(order);
+        log.info("Created merchant order [id={}, ref={}, tracking={}] for merchant [{}]",
+                saved.getId(), saved.getMerchantOrderRef(), saved.getTrackingNumber(), merchant.getId());
+
+        return toResponse(saved);
     }
-    public MerchantOrderResponse detail(VerifiedMerchantOrderAccess access,String id) {
-        var actor=authorize(access,"orders:read");
-        if (!ParcelId.isValid(id)) throw error(400,"INVALID_REQUEST","Invalid order identifier");
+
+    @Transactional
+    public BulkMerchantOrderResponse createBulkOrders(Merchant merchant, BulkMerchantOrderRequest bulkRequest) {
+        List<MerchantOrderResponse> successfulOrders = new ArrayList<>();
+        List<BulkOrderErrorItem> failedOrders = new ArrayList<>();
+
+        List<MerchantOrderCreateRequest> orders = bulkRequest.getOrders();
+        for (int i = 0; i < orders.size(); i++) {
+            MerchantOrderCreateRequest req = orders.get(i);
+            try {
+                MerchantOrderResponse created = createOrder(merchant, req, null);
+                successfulOrders.add(created);
+            } catch (Exception ex) {
+                log.warn("Failed to create bulk order at index [{}]: {}", i, ex.getMessage());
+                failedOrders.add(new BulkOrderErrorItem(
+                        i,
+                        req.getMerchantOrderRef(),
+                        "CREATION_FAILED",
+                        ex.getMessage()
+                ));
+            }
+        }
+
+        return new BulkMerchantOrderResponse(
+                orders.size(),
+                successfulOrders.size(),
+                failedOrders.size(),
+                successfulOrders,
+                failedOrders
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public MerchantOrderPageResponse listOrders(
+            Merchant merchant,
+            String status,
+            String merchantOrderRef,
+            String trackingNumber,
+            Instant createdFrom,
+            Instant createdTo,
+            Pageable pageable) {
+        String cleanStatus = status != null && !status.isBlank() ? status.trim().toUpperCase() : null;
+        String cleanRef = merchantOrderRef != null && !merchantOrderRef.isBlank() ? merchantOrderRef.trim() : null;
+        String cleanTracking = trackingNumber != null && !trackingNumber.isBlank() ? trackingNumber.trim() : null;
+
+        Page<MerchantOrder> orderPage;
+        if (cleanStatus == null && cleanRef == null && cleanTracking == null && createdFrom == null && createdTo == null) {
+            orderPage = merchantOrderRepository.findByMerchantIdOrderByCreatedAtDesc(merchant.getId(), pageable);
+        } else {
+            orderPage = merchantOrderRepository.searchOrders(
+                    merchant.getId(),
+                    cleanStatus,
+                    cleanRef,
+                    cleanTracking,
+                    createdFrom,
+                    createdTo,
+                    pageable
+            );
+        }
+
+        List<MerchantOrderResponse> items = orderPage.getContent().stream()
+                .map(this::toResponse)
+                .toList();
+
+        return new MerchantOrderPageResponse(
+                items,
+                orderPage.getTotalElements(),
+                orderPage.getNumber(),
+                orderPage.getSize(),
+                orderPage.getTotalPages()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public MerchantOrderResponse getOrder(Merchant merchant, String orderIdentifier) {
+        if (orderIdentifier == null || orderIdentifier.isBlank()) {
+            throw new ResourceNotFoundException("Order identifier is required");
+        }
+
+        String trimmed = orderIdentifier.trim();
+        Optional<MerchantOrder> found = Optional.empty();
+
         try {
-            var response=mapper.order(actor.merchantId(),client.getMerchantParcel(actor.merchantId(),id));
-            if (!id.equals(response.id())) throw new ParcelClientException(502,false); return response;
-        } catch (ParcelClientException e) { throw error(e.status(),e.status()==404 ? "ORDER_NOT_FOUND" : "PARCEL_SERVICE_UNAVAILABLE",e.status()==404 ? "Order not found" : "Parcel service request failed"); }
+            UUID orderUuid = UUID.fromString(trimmed);
+            found = merchantOrderRepository.findByIdAndMerchantId(orderUuid, merchant.getId());
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        if (found.isEmpty()) {
+            found = merchantOrderRepository.findByMerchantIdAndTrackingNumber(merchant.getId(), trimmed);
+        }
+
+        if (found.isEmpty()) {
+            found = merchantOrderRepository.findByMerchantIdAndParcelId(merchant.getId(), trimmed);
+        }
+
+        if (found.isEmpty()) {
+            found = merchantOrderRepository.findByMerchantIdAndMerchantOrderRef(merchant.getId(), trimmed);
+        }
+
+        return found.map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with identifier: " + orderIdentifier));
     }
-    private VerifiedMerchantApiCredential authorize(VerifiedMerchantOrderAccess access,String scope) {
-        if (access==null || access.credential()==null || access.credential().merchantId()==null || access.credential().credentialId()==null) throw error(401,"INVALID_API_KEY","API credential is invalid");
-        if (!access.credential().scopes().contains(scope)) throw error(403,"INSUFFICIENT_SCOPE","Required credential scope unavailable"); return access.credential();
+
+    public MerchantOrderResponse toResponse(MerchantOrder o) {
+        MerchantRecipientRequest recipient = new MerchantRecipientRequest(
+                o.getRecipientName(),
+                o.getRecipientPhone()
+        );
+
+        MerchantOrderAddressRequest pickup = new MerchantOrderAddressRequest(
+                o.getPickupAddress(),
+                o.getPickupCity(),
+                o.getPickupDistrict(),
+                o.getPickupPostalCode()
+        );
+
+        MerchantOrderAddressRequest delivery = new MerchantOrderAddressRequest(
+                o.getRecipientAddress(),
+                o.getRecipientCity(),
+                o.getRecipientDistrict(),
+                o.getRecipientPostalCode()
+        );
+
+        MerchantOrderDetailsDto details = new MerchantOrderDetailsDto(
+                o.getMerchantOrderRef(),
+                recipient,
+                pickup,
+                delivery,
+                o.getDescription(),
+                o.getWeightKg(),
+                o.getParcelSize(),
+                o.getDeclaredValue(),
+                o.getFragile(),
+                o.getSpecialInstructions(),
+                o.getPaymentMethod()
+        );
+
+        return new MerchantOrderResponse(
+                o.getId(),
+                o.getMerchantOrderRef(),
+                o.getTrackingNumber(),
+                o.getParcelId(),
+                o.getStatus(),
+                details,
+                o.getDeliveryFee(),
+                o.getTotalFee(),
+                o.getCurrency(),
+                o.getCreatedAt(),
+                o.getUpdatedAt()
+        );
     }
-    private void validate(Object value) { if (value==null || !validator.validate(value).isEmpty()) throw error(400,"INVALID_REQUEST","Request validation failed"); }
-    private MerchantOrderException error(int status,String code,String message) { return new MerchantOrderException(status,code,message); }
 }

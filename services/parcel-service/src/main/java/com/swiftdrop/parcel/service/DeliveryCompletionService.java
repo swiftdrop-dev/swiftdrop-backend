@@ -1,6 +1,9 @@
 package com.swiftdrop.parcel.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.parcel.entity.ParcelStatusHistory;
+import com.swiftdrop.parcel.event.ParcelBookedApplicationEvent;
 import com.swiftdrop.parcel.exception.CourierAssignmentMismatchException;
 import com.swiftdrop.parcel.exception.ParcelNotFoundException;
 import com.swiftdrop.parcel.exception.ParcelStatusConflictException;
@@ -9,11 +12,17 @@ import com.swiftdrop.parcel.repository.ParcelDeliveryOtpChallengeRepository;
 import com.swiftdrop.parcel.repository.ParcelDeliveryPhotoProofRepository;
 import com.swiftdrop.parcel.repository.ParcelRepository;
 import com.swiftdrop.parcel.repository.ParcelStatusHistoryRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -24,6 +33,8 @@ import java.util.UUID;
  */
 @Service
 public class DeliveryCompletionService {
+    private static final Logger log = LoggerFactory.getLogger(DeliveryCompletionService.class);
+
     private final ParcelRepository parcelRepository;
     private final ParcelAssignmentRepository assignmentRepository;
     private final ParcelDeliveryOtpChallengeRepository otpChallengeRepository;
@@ -31,6 +42,9 @@ public class DeliveryCompletionService {
     private final ParcelStatusHistoryRepository historyRepository;
     private final ParcelStatusTransitionValidator transitionValidator;
     private final DeliveryCompletionPolicy completionPolicy;
+    private final OutboxEventService outboxEventService;
+    private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
 
     public DeliveryCompletionService(ParcelRepository parcelRepository,
@@ -41,6 +55,22 @@ public class DeliveryCompletionService {
                                      ParcelStatusTransitionValidator transitionValidator,
                                      DeliveryCompletionPolicy completionPolicy,
                                      Clock clock) {
+        this(parcelRepository, assignmentRepository, otpChallengeRepository, photoProofRepository,
+                historyRepository, transitionValidator, completionPolicy, null, null, null, clock);
+    }
+
+    @Autowired
+    public DeliveryCompletionService(ParcelRepository parcelRepository,
+                                     ParcelAssignmentRepository assignmentRepository,
+                                     ParcelDeliveryOtpChallengeRepository otpChallengeRepository,
+                                     ParcelDeliveryPhotoProofRepository photoProofRepository,
+                                     ParcelStatusHistoryRepository historyRepository,
+                                     ParcelStatusTransitionValidator transitionValidator,
+                                     DeliveryCompletionPolicy completionPolicy,
+                                     OutboxEventService outboxEventService,
+                                     ObjectMapper objectMapper,
+                                     ApplicationEventPublisher applicationEventPublisher,
+                                     Clock clock) {
         this.parcelRepository = parcelRepository;
         this.assignmentRepository = assignmentRepository;
         this.otpChallengeRepository = otpChallengeRepository;
@@ -48,6 +78,9 @@ public class DeliveryCompletionService {
         this.historyRepository = historyRepository;
         this.transitionValidator = transitionValidator;
         this.completionPolicy = completionPolicy;
+        this.outboxEventService = outboxEventService;
+        this.objectMapper = objectMapper;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.clock = clock;
     }
 
@@ -112,10 +145,36 @@ public class DeliveryCompletionService {
 
         challenge.consumeProofAt(completedAt);
         photoProof.consumeAt(completedAt);
+        String previousStatus = parcel.getStatus();
         parcel.completeDelivery(deliveredAt);
         parcelRepository.saveAndFlush(parcel);
-        historyRepository.saveAndFlush(new ParcelStatusHistory(parcelId, ParcelStatusTransitionValidator.IN_TRANSIT,
+        historyRepository.saveAndFlush(new ParcelStatusHistory(parcelId, previousStatus,
                 ParcelStatusTransitionValidator.DELIVERED, completedAt, trustedCourierId, null));
+
+        if (outboxEventService != null && objectMapper != null) {
+            String eventType = "PARCEL_DELIVERED";
+            Map<String, Object> event = new HashMap<>();
+            event.put("eventId", UUID.randomUUID().toString());
+            event.put("eventType", eventType);
+            event.put("eventVersion", "1.0");
+            event.put("occurredAt", completedAt.toString());
+            event.put("parcelId", parcel.getId());
+            event.put("trackingNumber", parcel.getTrackingNumber());
+            event.put("status", "delivered");
+            event.put("courierId", trustedCourierId);
+            event.put("senderId", parcel.getSenderId());
+            event.put("customerId", parcel.getSenderId());
+            event.put("deliveredAt", deliveredAt.toString());
+            try {
+                String payload = objectMapper.writeValueAsString(event);
+                outboxEventService.saveEvent("PARCEL", parcel.getId(), eventType, payload);
+                if (applicationEventPublisher != null) {
+                    applicationEventPublisher.publishEvent(new ParcelBookedApplicationEvent(parcel.getId()));
+                }
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize outbox event for delivery completion", e);
+            }
+        }
 
         return new DeliveryCompletionResult(parcelId, ParcelStatusTransitionValidator.DELIVERED, completedAt);
     }

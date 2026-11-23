@@ -44,6 +44,13 @@ public class OutboxPublisherWorker {
             String routingKey = "dispatch." + event.getEventType().toLowerCase().replace('_', '.');
             try {
                 rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE_NAME, routingKey, event.getPayload());
+                if ("DispatchJobAcceptedEvent".equalsIgnoreCase(event.getEventType())) {
+                    rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE_NAME, "courier.accepted", event.getPayload());
+                } else if ("DispatchJobAssignedEvent".equalsIgnoreCase(event.getEventType())) {
+                    rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE_NAME, "dispatch.assigned", event.getPayload());
+                } else if ("DispatchJobDeclinedEvent".equalsIgnoreCase(event.getEventType())) {
+                    rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE_NAME, "courier.declined", event.getPayload());
+                }
                 event.setStatus(OutboxStatus.PUBLISHED);
                 event.setPublishedAt(Instant.now());
                 event.setLastError(null);

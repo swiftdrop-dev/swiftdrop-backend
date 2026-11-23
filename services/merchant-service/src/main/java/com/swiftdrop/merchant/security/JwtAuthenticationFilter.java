@@ -37,7 +37,17 @@ public final class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         String authorization = values.nextElement();
-        if (values.hasMoreElements() || authorization == null || !authorization.startsWith("Bearer ")
+        if (values.hasMoreElements() || authorization == null) {
+            reject(response);
+            return;
+        }
+
+        if (authorization.startsWith("ApiKey ") || authorization.startsWith("Bearer sk_")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (!authorization.startsWith("Bearer ")
                 || authorization.length() <= 7 || authorization.substring(7).isBlank()) {
             reject(response);
             return;

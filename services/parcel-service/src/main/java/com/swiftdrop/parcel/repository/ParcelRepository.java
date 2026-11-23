@@ -35,4 +35,29 @@ public interface ParcelRepository extends JpaRepository<Parcel, String> {
     Page<Parcel> findByCourierIdOrderByCreatedAtDesc(String courierId, Pageable pageable);
 
     Page<Parcel> findByCourierIdAndStatusOrderByCreatedAtDesc(String courierId, String status, Pageable pageable);
+
+    @Query("SELECT p FROM Parcel p WHERE " +
+           "(CAST(:status AS string) IS NULL OR LOWER(p.status) = LOWER(CAST(:status AS string))) AND " +
+           "(CAST(:query AS string) IS NULL OR " +
+           "LOWER(p.trackingNumber) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) " +
+           "OR LOWER(p.senderName) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) " +
+           "OR LOWER(p.recipientName) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')))")
+    Page<Parcel> searchParcels(
+            @Param("query") String query,
+            @Param("status") String status,
+            Pageable pageable);
+
+    long countByStatus(String status);
+
+    @Query("SELECT p.status, count(p) FROM Parcel p GROUP BY p.status")
+    List<Object[]> countByStatusGroup();
+
+    @Query("SELECT COALESCE(SUM(p.totalFee), 0) FROM Parcel p WHERE p.status <> 'cancelled'")
+    Double sumTotalRevenue();
+
+    @Query("SELECT p FROM Parcel p WHERE p.createdAt >= :since ORDER BY p.createdAt ASC")
+    List<Parcel> findParcelsCreatedSince(@Param("since") java.time.Instant since);
+
+    @Query("SELECT p.createdAt, p.deliveredAt, p.updatedAt FROM Parcel p WHERE LOWER(p.status) = 'delivered' AND p.createdAt IS NOT NULL")
+    List<Object[]> findDeliveredDurations();
 }
