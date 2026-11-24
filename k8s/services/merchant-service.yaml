@@ -1,0 +1,183 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: merchant-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: merchant-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: merchant-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: merchant-service
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      containers:
+        - name: merchant-service
+          image: swiftdrop-backend-merchant-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8084
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+            - name: JAVA_TOOL_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: JAVA_TOOL_OPTIONS
+            - name: MERCHANT_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_DB_URL
+            - name: MERCHANT_DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_DB_USERNAME
+            - name: MERCHANT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: MERCHANT_DB_PASSWORD
+            - name: MERCHANT_FLYWAY_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_FLYWAY_USER
+            - name: MERCHANT_FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: MERCHANT_FLYWAY_PASSWORD
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_DB_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: MERCHANT_DB_PASSWORD
+            - name: SPRING_RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SPRING_RABBITMQ_HOST
+            - name: SPRING_RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SPRING_RABBITMQ_PORT
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SPRING_RABBITMQ_USERNAME
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: JWT_SECRET
+            - name: PARCEL_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PARCEL_SERVICE_URL
+            - name: PRICING_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PRICING_SERVICE_URL
+            - name: SERVICES_PARCEL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SERVICES_PARCEL_URL
+            - name: SERVICES_PRICING_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SERVICES_PRICING_URL
+            - name: MERCHANT_WEBHOOK_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: MERCHANT_WEBHOOK_ENCRYPTION_KEY
+            - name: MERCHANT_WEBHOOK_ALLOW_LOCALHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_WEBHOOK_ALLOW_LOCALHOST
+            - name: MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 160Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchant-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: merchant-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: merchant-service
+  ports:
+    - name: http
+      port: 8084
+      targetPort: 8084

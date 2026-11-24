@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftdrop-config
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/part-of: swiftdrop
+data:
+  # Database Configuration (Neon Cloud PostgreSQL Pooler)
+  PGHOST: "ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech"
+  PGPORT: "5432"
+  PGUSER: "neondb_owner"
+  PGSSLMODE: "require"
+
+  # Spring & Microservice JDBC URLs
+  AUTH_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/auth_db?sslmode=require&channel_binding=require"
+  PARCEL_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/parcel_db?sslmode=require&channel_binding=require"
+  PRICING_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/pricing_db?sslmode=require&channel_binding=require"
+  MERCHANT_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/merchantdb?sslmode=require&channel_binding=require"
+  DISPATCH_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/dispatcherdb?sslmode=require&channel_binding=require"
+  COURIER_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/courier_db?sslmode=require&channel_binding=require"
+  TRACKING_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/tracking_db?sslmode=require&channel_binding=require"
+  NOTIFICATION_DB_URL: "jdbc:postgresql://ep-sparkling-smoke-bdghtf2s-pooler.c-8.us-east-2.aws.neon.tech:5432/notification_db?sslmode=require&channel_binding=require"
+
+  # Database Usernames
+  AUTH_DB_USERNAME: "neondb_owner"
+  PARCEL_DB_USERNAME: "neondb_owner"
+  PRICING_DB_USERNAME: "neondb_owner"
+  MERCHANT_DB_USERNAME: "neondb_owner"
+  MERCHANT_FLYWAY_USER: "neondb_owner"
+  DISPATCH_DB_USERNAME: "neondb_owner"
+  DISPATCH_FLYWAY_USER: "neondb_owner"
+  COURIER_DB_USERNAME: "neondb_owner"
+  TRACKING_DB_USERNAME: "neondb_owner"
+  NOTIFICATION_DB_USERNAME: "neondb_owner"
+
+  # Database Names
+  AUTH_DB_NAME: "auth_db"
+  PARCEL_DB_NAME: "parcel_db"
+  PRICING_DB_NAME: "pricing_db"
+  MERCHANT_DB_NAME: "merchantdb"
+  DISPATCH_DB_NAME: "dispatcherdb"
+  COURIER_DB_NAME: "courier_db"
+  TRACKING_DB_NAME: "tracking_db"
+  NOTIFICATION_DB_NAME: "notification_db"
+
+  # RabbitMQ Message Broker Configuration
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_DEFAULT_USER: "swiftdrop_app"
+  RABBITMQ_USERNAME: "swiftdrop_app"
+  SPRING_RABBITMQ_HOST: "rabbitmq"
+  SPRING_RABBITMQ_PORT: "5672"
+  SPRING_RABBITMQ_USERNAME: "swiftdrop_app"
+
+  # Inter-Service Routing URLs
+  AUTH_SERVICE_URL: "http://auth-service:8081"
+  PARCEL_SERVICE_URL: "http://parcel-service:8082"
+  PRICING_SERVICE_URL: "http://pricing-service:8083"
+  MERCHANT_SERVICE_URL: "http://merchant-service:8084"
+  DISPATCH_SERVICE_URL: "http://dispatch-service:8085"
+  COURIER_SERVICE_URL: "http://courier-service:8086"
+  TRACKING_SERVICE_URL: "http://tracking-service:8087"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:8088"
+  REPORTING_SERVICE_URL: "http://reporting-service:8090"
+
+  SERVICES_AUTH_URL: "http://auth-service:8081"
+  SERVICES_PARCEL_URL: "http://parcel-service:8082"
+  SERVICES_PRICING_URL: "http://pricing-service:8083"
+  SERVICES_MERCHANT_URL: "http://merchant-service:8084"
+  SERVICES_DISPATCH_URL: "http://dispatch-service:8085"
+  SERVICES_COURIER_URL: "http://courier-service:8086"
+  SERVICES_TRACKING_URL: "http://tracking-service:8087"
+  SERVICES_NOTIFICATION_URL: "http://notification-service:8088"
+  SERVICES_REPORTING_URL: "http://reporting-service:8090"
+
+  # Service Application Settings
+  CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost,http://localhost:8099"
+  GOOGLE_VERIFY_ONLINE: "false"
+  NOTIFICATION_SIMULATION_MODE: "true"
+  MERCHANT_WEBHOOK_ALLOW_LOCALHOST: "true"
+  MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP: "true"
+
+  # Java / JVM Optimizations for Containerized Services
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xms64m -Xmx160m -XX:MaxMetaspaceSize=128m"
