@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: courier-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: courier-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: courier-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: courier-service
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      containers:
+        - name: courier-service
+          image: swiftdrop-backend-courier-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8086
+          env:
+            - name: SERVER_PORT
+              value: "8086"
+            - name: JAVA_TOOL_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: JAVA_TOOL_OPTIONS
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_NAME
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_USERNAME
+            - name: PGSSLMODE
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PGSSLMODE
+            - name: COURIER_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_URL
+            - name: COURIER_DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_USERNAME
+            - name: COURIER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: COURIER_DB_PASSWORD
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_DB_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: COURIER_DB_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: JWT_SECRET
+            - name: CLOUDINARY_CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: CLOUDINARY_CLOUD_NAME
+            - name: CLOUDINARY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: CLOUDINARY_API_KEY
+            - name: CLOUDINARY_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: CLOUDINARY_API_SECRET
+          resources:
+            requests:
+              cpu: 50m
+              memory: 160Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: courier-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: courier-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: courier-service
+  ports:
+    - name: http
+      port: 8086
+      targetPort: 8086
