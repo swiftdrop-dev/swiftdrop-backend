@@ -22,6 +22,7 @@ class GatewayProxyHeaderSanitizationTest {
         request.addHeader("Forwarded", "for=127.0.0.1;proto=https");
         request.addHeader("Cookie", "session=attacker-controlled");
         request.addHeader("X-Internal-Role", "admin");
+        request.addHeader("X-Dispatch-Service-Token", "caller-supplied-service-token");
         request.addHeader("Idempotency-Key", "request-key-123");
         request.addHeader(HttpHeaders.ACCEPT, "application/json");
         HttpHeaders forwardedHeaders = new HttpHeaders();
@@ -36,6 +37,7 @@ class GatewayProxyHeaderSanitizationTest {
         assertNull(forwardedHeaders.getFirst("Forwarded"));
         assertNull(forwardedHeaders.getFirst("Cookie"));
         assertNull(forwardedHeaders.getFirst("X-Internal-Role"));
+        assertNull(forwardedHeaders.getFirst("X-Dispatch-Service-Token"));
         assertEquals("request-key-123", forwardedHeaders.getFirst("Idempotency-Key"));
         assertEquals("application/json", forwardedHeaders.getFirst(HttpHeaders.ACCEPT));
     }

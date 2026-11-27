@@ -30,8 +30,8 @@ public class DispatchAssignment {
     @JoinColumn(name = "dispatch_job_id", nullable = false)
     private DispatchJob dispatchJob;
 
-    @Column(name = "courier_id", nullable = false)
-    private UUID courierId;
+    @Column(name = "courier_id", nullable = false, length = 64)
+    private String courierId;
 
     @Column(name = "attempt_number", nullable = false)
     private Integer attemptNumber = 1;
@@ -91,11 +91,11 @@ public class DispatchAssignment {
         this.dispatchJob = dispatchJob;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

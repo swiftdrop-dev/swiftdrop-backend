@@ -119,6 +119,11 @@ spec:
                 secretKeyRef:
                   name: swiftdrop-secrets
                   key: PARCEL_OTP_HMAC_SECRET
+            - name: PRICING_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: PRICING_SERVICE_URL
           resources:
             requests:
               cpu: 50m

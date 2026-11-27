@@ -70,7 +70,8 @@ class MerchantWebhookServiceTest {
     private WebhookSignatureService signatureService;
 
     @Spy
-    private WebhookSecretCryptoService cryptoService = new WebhookSecretCryptoService("");
+    private WebhookSecretCryptoService cryptoService = new WebhookSecretCryptoService(
+            "dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy1sb25nISE=");
 
     @Mock
     private WebhookDispatcherService dispatcherService;

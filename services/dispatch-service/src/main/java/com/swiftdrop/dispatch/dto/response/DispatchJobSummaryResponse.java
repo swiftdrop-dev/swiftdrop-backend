@@ -16,9 +16,16 @@ public class DispatchJobSummaryResponse {
     private String trackingNumber;
     private UUID merchantId;
     private String zoneCode;
-    private UUID courierId;
+    private String courierId;
     private String pickupCity;
     private String deliveryCity;
+    private BigDecimal pickupLatitude;
+    private BigDecimal pickupLongitude;
+    private BigDecimal deliveryLatitude;
+    private BigDecimal deliveryLongitude;
+    private BigDecimal totalFee;
+    private BigDecimal courierLatitude;
+    private BigDecimal courierLongitude;
     private BigDecimal parcelWeightKg;
     private VehicleType requiredVehicleType;
     private DispatchPriority priority;
@@ -69,11 +76,11 @@ public class DispatchJobSummaryResponse {
         this.zoneCode = zoneCode;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 
@@ -139,5 +146,61 @@ public class DispatchJobSummaryResponse {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public BigDecimal getPickupLatitude() {
+        return pickupLatitude;
+    }
+
+    public void setPickupLatitude(BigDecimal pickupLatitude) {
+        this.pickupLatitude = pickupLatitude;
+    }
+
+    public BigDecimal getPickupLongitude() {
+        return pickupLongitude;
+    }
+
+    public void setPickupLongitude(BigDecimal pickupLongitude) {
+        this.pickupLongitude = pickupLongitude;
+    }
+
+    public BigDecimal getDeliveryLatitude() {
+        return deliveryLatitude;
+    }
+
+    public void setDeliveryLatitude(BigDecimal deliveryLatitude) {
+        this.deliveryLatitude = deliveryLatitude;
+    }
+
+    public BigDecimal getDeliveryLongitude() {
+        return deliveryLongitude;
+    }
+
+    public void setDeliveryLongitude(BigDecimal deliveryLongitude) {
+        this.deliveryLongitude = deliveryLongitude;
+    }
+
+    public BigDecimal getTotalFee() {
+        return totalFee;
+    }
+
+    public void setTotalFee(BigDecimal totalFee) {
+        this.totalFee = totalFee;
+    }
+
+    public BigDecimal getCourierLatitude() {
+        return courierLatitude;
+    }
+
+    public void setCourierLatitude(BigDecimal courierLatitude) {
+        this.courierLatitude = courierLatitude;
+    }
+
+    public BigDecimal getCourierLongitude() {
+        return courierLongitude;
+    }
+
+    public void setCourierLongitude(BigDecimal courierLongitude) {
+        this.courierLongitude = courierLongitude;
     }
 }

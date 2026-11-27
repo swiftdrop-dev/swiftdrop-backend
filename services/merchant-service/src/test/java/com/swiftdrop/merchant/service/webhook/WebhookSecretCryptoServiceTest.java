@@ -88,11 +88,8 @@ class WebhookSecretCryptoServiceTest {
     }
 
     @Test
-    void shouldFallbackToDeterministicDevKeyWhenKeyNotConfigured() {
-        WebhookSecretCryptoService devService = new WebhookSecretCryptoService("");
-        String secret = "whsec_dev_mode_secret";
-        String encrypted = devService.encrypt(secret);
-        assertTrue(encrypted.startsWith("enc:v1:"));
-        assertEquals(secret, devService.decrypt(encrypted));
+    void shouldFailWhenEncryptionKeyIsMissing() {
+        assertThrows(IllegalStateException.class, () -> new WebhookSecretCryptoService(""));
+        assertThrows(IllegalStateException.class, () -> new WebhookSecretCryptoService("   "));
     }
 }

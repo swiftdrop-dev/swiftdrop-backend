@@ -94,11 +94,21 @@ spec:
                 secretKeyRef:
                   name: swiftdrop-secrets
                   key: RABBITMQ_PASSWORD
+            - name: COURIER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: COURIER_SERVICE_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: swiftdrop-secrets
                   key: JWT_SECRET
+            - name: DISPATCH_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: DISPATCH_SERVICE_TOKEN
           resources:
             requests:
               cpu: 50m

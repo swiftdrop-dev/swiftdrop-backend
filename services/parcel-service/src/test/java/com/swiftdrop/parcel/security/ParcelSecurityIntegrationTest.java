@@ -124,12 +124,59 @@ class ParcelSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Direct access: Public track endpoint accessible without token")
-    void publicTrackAccessibleWithoutToken() throws Exception {
-        when(parcelRepository.findByTrackingNumber("TRK-12345")).thenReturn(java.util.Optional.empty());
-
+    @DisplayName("Direct access: Parcel track endpoint requires authentication")
+    void parcelTrackRequiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/parcels/track/TRK-12345"))
-                .andExpect(status().isNotFound()); // NotFound means auth passed and controller ran
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Direct access: Owner can read a parcel and another customer cannot")
+    void ownerCanReadParcelAndOtherCustomerIsHidden() throws Exception {
+        UUID ownerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID otherId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        com.swiftdrop.parcel.entity.Parcel parcel = new com.swiftdrop.parcel.entity.Parcel(
+                "prc_sec", null, "TRK-SEC", "CREATED", null, "Owner", "1", "Address");
+        parcel.setSenderId(ownerId.toString());
+        when(parcelRepository.findById("prc_sec")).thenReturn(java.util.Optional.of(parcel));
+
+        mockMvc.perform(get("/api/v1/parcels/prc_sec")
+                        .header("Authorization", "Bearer " + tokenFor("customer", ownerId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/parcels/prc_sec")
+                        .header("Authorization", "Bearer " + tokenFor("customer", otherId))
+                        .header("X-User-Id", ownerId.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Direct access: Dispatcher and admin can read a parcel they do not own")
+    void dispatcherAndAdminCanReadParcel() throws Exception {
+        UUID ownerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        com.swiftdrop.parcel.entity.Parcel parcel = new com.swiftdrop.parcel.entity.Parcel(
+                "prc_sec", null, "TRK-SEC", "CREATED", null, "Owner", "1", "Address");
+        parcel.setSenderId(ownerId.toString());
+        when(parcelRepository.findById("prc_sec")).thenReturn(java.util.Optional.of(parcel));
+
+        mockMvc.perform(get("/api/v1/parcels/prc_sec")
+                        .header("Authorization", "Bearer " + tokenFor("dispatcher", UUID.randomUUID())))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/parcels/prc_sec")
+                        .header("Authorization", "Bearer " + tokenFor("admin", UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    private String tokenFor(String role, UUID userId) {
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("userId", userId.toString())
+                .claim("email", role + "@swiftdrop.lk")
+                .claim("role", role)
+                .issuedAt(Date.from(Instant.now().minus(1, ChronoUnit.MINUTES)))
+                .expiration(Date.from(Instant.now().plus(1, ChronoUnit.HOURS)))
+                .signWith(KEY)
+                .compact();
     }
 
     @Test

@@ -48,8 +48,8 @@ public class DispatchJob {
     @JoinColumn(name = "zone_id")
     private DispatchZone zone;
 
-    @Column(name = "courier_id")
-    private UUID courierId;
+    @Column(name = "courier_id", length = 64)
+    private String courierId;
 
     @Column(name = "pickup_street_address", nullable = false, length = 500)
     private String pickupStreetAddress;
@@ -57,10 +57,10 @@ public class DispatchJob {
     @Column(name = "pickup_city", nullable = false, length = 100)
     private String pickupCity;
 
-    @Column(name = "pickup_latitude", nullable = false, precision = 10, scale = 7)
+    @Column(name = "pickup_latitude", precision = 10, scale = 7)
     private BigDecimal pickupLatitude;
 
-    @Column(name = "pickup_longitude", nullable = false, precision = 10, scale = 7)
+    @Column(name = "pickup_longitude", precision = 10, scale = 7)
     private BigDecimal pickupLongitude;
 
     @Column(name = "delivery_street_address", nullable = false, length = 500)
@@ -69,14 +69,17 @@ public class DispatchJob {
     @Column(name = "delivery_city", nullable = false, length = 100)
     private String deliveryCity;
 
-    @Column(name = "delivery_latitude", nullable = false, precision = 10, scale = 7)
+    @Column(name = "delivery_latitude", precision = 10, scale = 7)
     private BigDecimal deliveryLatitude;
 
-    @Column(name = "delivery_longitude", nullable = false, precision = 10, scale = 7)
+    @Column(name = "delivery_longitude", precision = 10, scale = 7)
     private BigDecimal deliveryLongitude;
 
     @Column(name = "parcel_weight_kg", nullable = false, precision = 6, scale = 2)
     private BigDecimal parcelWeightKg;
+
+    @Column(name = "total_fee", precision = 12, scale = 2)
+    private BigDecimal totalFee;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "required_vehicle_type", nullable = false, length = 50)
@@ -207,11 +210,11 @@ public class DispatchJob {
         this.zone = zone;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 
@@ -285,6 +288,14 @@ public class DispatchJob {
 
     public void setParcelWeightKg(BigDecimal parcelWeightKg) {
         this.parcelWeightKg = parcelWeightKg;
+    }
+
+    public BigDecimal getTotalFee() {
+        return totalFee;
+    }
+
+    public void setTotalFee(BigDecimal totalFee) {
+        this.totalFee = totalFee;
     }
 
     public VehicleType getRequiredVehicleType() {

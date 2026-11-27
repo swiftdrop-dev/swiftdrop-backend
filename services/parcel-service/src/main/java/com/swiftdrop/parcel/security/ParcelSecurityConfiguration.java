@@ -7,7 +7,6 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -54,8 +53,6 @@ public class ParcelSecurityConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/error", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/parcels/track/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/parcels/{id:[0-9a-zA-Z_-]+}").permitAll()
                         .requestMatchers("/internal/v1/**").denyAll()
                         .requestMatchers("/api/v1/parcels/admin/**").hasAnyRole("ADMIN", "DISPATCHER", "STAFF")
                         .anyRequest().authenticated())

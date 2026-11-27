@@ -24,11 +24,6 @@ public class ParcelCreatedEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(ParcelCreatedEventConsumer.class);
 
-    private static final BigDecimal DEFAULT_PICKUP_LAT = new BigDecimal("6.9271");
-    private static final BigDecimal DEFAULT_PICKUP_LNG = new BigDecimal("79.8612");
-    private static final BigDecimal DEFAULT_DELIVERY_LAT = new BigDecimal("6.9034");
-    private static final BigDecimal DEFAULT_DELIVERY_LNG = new BigDecimal("79.8550");
-
     private final DispatchJobService dispatchJobService;
     private final DispatchJobRepository jobRepository;
 
@@ -145,20 +140,19 @@ public class ParcelCreatedEventConsumer {
         request.setPickupStreetAddress(event.getPickupAddress());
         request.setPickupCity(event.getPickupCity() != null && !event.getPickupCity().isBlank()
                 ? event.getPickupCity() : extractCity(event.getPickupAddress()));
-        request.setPickupLatitude(event.getPickupLatitude() != null
-                ? event.getPickupLatitude() : DEFAULT_PICKUP_LAT);
-        request.setPickupLongitude(event.getPickupLongitude() != null
-                ? event.getPickupLongitude() : DEFAULT_PICKUP_LNG);
+        request.setPickupLatitude(event.getPickupLatitude());
+        request.setPickupLongitude(event.getPickupLongitude());
 
         request.setDeliveryStreetAddress(event.getDeliveryAddress());
         request.setDeliveryCity(event.getDeliveryCity() != null && !event.getDeliveryCity().isBlank()
                 ? event.getDeliveryCity() : extractCity(event.getDeliveryAddress()));
-        request.setDeliveryLatitude(event.getDeliveryLatitude() != null
-                ? event.getDeliveryLatitude() : DEFAULT_DELIVERY_LAT);
-        request.setDeliveryLongitude(event.getDeliveryLongitude() != null
-                ? event.getDeliveryLongitude() : DEFAULT_DELIVERY_LNG);
+        request.setDeliveryLatitude(event.getDeliveryLatitude());
+        request.setDeliveryLongitude(event.getDeliveryLongitude());
 
         request.setParcelWeightKg(event.getWeightKg());
+        if (event.getTotalFee() != null) {
+            request.setTotalFee(event.getTotalFee());
+        }
 
         // Vehicle Type Resolution
         if (event.getWeightKg().compareTo(new BigDecimal("20.0")) > 0

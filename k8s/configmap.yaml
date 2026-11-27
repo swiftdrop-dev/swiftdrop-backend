@@ -76,10 +76,10 @@ data:
 
   # Service Application Settings
   CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost,http://localhost:8099"
-  GOOGLE_VERIFY_ONLINE: "false"
+  GOOGLE_VERIFY_ONLINE: "true"
   NOTIFICATION_SIMULATION_MODE: "true"
-  MERCHANT_WEBHOOK_ALLOW_LOCALHOST: "true"
-  MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP: "true"
+  MERCHANT_WEBHOOK_ALLOW_LOCALHOST: "false"
+  MERCHANT_WEBHOOK_ALLOW_INSECURE_HTTP: "false"
 
   # Java / JVM Optimizations for Containerized Services
   JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xms64m -Xmx160m -XX:MaxMetaspaceSize=128m"

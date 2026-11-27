@@ -30,6 +30,16 @@ public record CreateParcelBookingRequest(
 
         String paymentMethod,
 
-        BigDecimal totalFee
+        BigDecimal totalFee,
+
+        String senderName,
+
+        String senderPhone,
+
+        String fromZoneCode,
+
+        String toZoneCode,
+
+        String deliveryType
 ) {
 }

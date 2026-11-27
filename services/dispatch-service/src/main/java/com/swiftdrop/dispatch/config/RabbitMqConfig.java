@@ -11,6 +11,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +25,6 @@ public class RabbitMqConfig {
     public static final String EXCHANGE_NAME = "swiftdrop.exchange";
     public static final String PARCEL_CREATED_QUEUE = "dispatch.parcel-created.queue";
     public static final String ROUTING_KEY_PARCEL_CREATED = "parcel.created";
-    public static final String ROUTING_KEY_PARCEL_WILDCARD = "parcel.#";
 
     public static final String DLX_NAME = "swiftdrop.dlx";
     public static final String PARCEL_CREATED_DLQ = "dispatch.parcel-created.dlq";
@@ -61,13 +61,6 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public Binding parcelCreatedWildcardBinding(Queue parcelCreatedQueue, TopicExchange swiftDropExchange) {
-        return BindingBuilder.bind(parcelCreatedQueue)
-                .to(swiftDropExchange)
-                .with(ROUTING_KEY_PARCEL_WILDCARD);
-    }
-
-    @Bean
     public Binding parcelCreatedDlqBinding(Queue parcelCreatedDlq, DirectExchange deadLetterExchange) {
         return BindingBuilder.bind(parcelCreatedDlq)
                 .to(deadLetterExchange)
@@ -89,10 +82,12 @@ public class RabbitMqConfig {
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
-            MessageConverter jsonMessageConverter) {
+            MessageConverter jsonMessageConverter,
+            @Value("${spring.rabbitmq.listener.simple.auto-startup:true}") boolean autoStartup) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(jsonMessageConverter);
+        factory.setAutoStartup(autoStartup);
         factory.setDefaultRequeueRejected(false); // Dead-letter routing on fatal/rejected failures
         return factory;
     }

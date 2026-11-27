@@ -140,9 +140,68 @@ public class MerchantOnboardingService {
         if (request.getBusinessType() != null) {
             merchant.setBusinessType(request.getBusinessType());
         }
+        updatePrimaryContact(merchant, request);
+        updatePrimaryPickup(merchantId, merchant, request);
 
         Merchant saved = merchantRepository.save(merchant);
         return merchantMapper.toMerchantResponse(saved);
+    }
+
+    private void updatePrimaryContact(Merchant merchant, UpdateMerchantProfileRequest request) {
+        boolean hasContact = notBlank(request.getContactName())
+                || notBlank(request.getContactEmail())
+                || notBlank(request.getContactPhone());
+        if (!hasContact) {
+            return;
+        }
+        MerchantContact primary = merchant.getContacts().stream()
+                .filter(contact -> contact.getContactType() == ContactType.PRIMARY)
+                .findFirst()
+                .orElse(null);
+        if (primary == null) {
+            if (!notBlank(request.getContactName()) || !notBlank(request.getContactEmail()) || !notBlank(request.getContactPhone())) {
+                return;
+            }
+            primary = new MerchantContact();
+            primary.setContactType(ContactType.PRIMARY);
+            primary.setDesignation("Authorized Representative");
+            merchant.addContact(primary);
+        }
+        if (notBlank(request.getContactName())) {
+            primary.setName(request.getContactName().trim());
+        }
+        if (notBlank(request.getContactEmail())) {
+            primary.setEmail(request.getContactEmail().trim());
+        }
+        if (notBlank(request.getContactPhone())) {
+            primary.setPhone(request.getContactPhone().trim());
+        }
+    }
+
+    private void updatePrimaryPickup(UUID merchantId, Merchant merchant, UpdateMerchantProfileRequest request) {
+        if (!notBlank(request.getPickupStreet()) || !notBlank(request.getPickupCity()) || !notBlank(request.getPickupDistrict())) {
+            return;
+        }
+        MerchantAddress primary = addressRepository.findByMerchantId(merchantId).stream()
+                .filter(address -> Boolean.TRUE.equals(address.getIsPrimaryPickup()))
+                .findFirst()
+                .orElse(null);
+        if (primary == null) {
+            primary = new MerchantAddress();
+            primary.setMerchant(merchant);
+            primary.setAddressLabel("Primary pickup");
+            primary.setPostalCode("00000");
+            primary.setIsPrimaryPickup(true);
+            primary.setIsActive(true);
+        }
+        primary.setStreetAddress(request.getPickupStreet().trim());
+        primary.setCity(request.getPickupCity().trim());
+        primary.setDistrict(request.getPickupDistrict().trim());
+        addressRepository.save(primary);
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     @Transactional

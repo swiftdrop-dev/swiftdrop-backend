@@ -34,20 +34,11 @@ public class WebhookSecretCryptoService {
     }
 
     private SecretKey initializeKey(String configuredKey) {
-        if (configuredKey != null && !configuredKey.isBlank()) {
-            byte[] keyBytes = parseKey(configuredKey.trim());
-            return new SecretKeySpec(keyBytes, "AES");
+        if (configuredKey == null || configuredKey.isBlank()) {
+            throw new IllegalStateException("MERCHANT_WEBHOOK_ENCRYPTION_KEY must be configured");
         }
-
-        // In test or local dev without configured key, derive a deterministic test key from a SHA-256 seed.
-        log.warn("MERCHANT_WEBHOOK_ENCRYPTION_KEY not configured. Using deterministic test encryption key. Production MUST configure a secure key!");
-        try {
-            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            byte[] testKeyBytes = sha256.digest("swiftdrop-default-dev-encryption-seed".getBytes(StandardCharsets.UTF_8));
-            return new SecretKeySpec(testKeyBytes, "AES");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm missing", e);
-        }
+        byte[] keyBytes = parseKey(configuredKey.trim());
+        return new SecretKeySpec(keyBytes, "AES");
     }
 
     private byte[] parseKey(String keyStr) {

@@ -1,5 +1,6 @@
 package com.swiftdrop.courier.config;
 
+import com.swiftdrop.courier.security.DispatchServiceAuthenticationFilter;
 import com.swiftdrop.courier.security.JwtAuthenticationFilter;
 import com.swiftdrop.courier.security.JwtTokenValidator;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +34,12 @@ public class SecurityConfig {
     }
 
     @Bean
+    public DispatchServiceAuthenticationFilter dispatchServiceAuthenticationFilter(
+            @Value("${dispatch.service-auth.token:}") String serviceToken) {
+        return new DispatchServiceAuthenticationFilter(serviceToken);
+    }
+
+    @Bean
     public FilterRegistrationBean<JwtAuthenticationFilter> disableContainerRegistration(JwtAuthenticationFilter jwtAuthenticationFilter) {
         FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
         registration.setEnabled(false);
@@ -40,7 +47,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+    public FilterRegistrationBean<DispatchServiceAuthenticationFilter> disableServiceFilterRegistration(
+            DispatchServiceAuthenticationFilter dispatchServiceAuthenticationFilter) {
+        FilterRegistrationBean<DispatchServiceAuthenticationFilter> registration =
+                new FilterRegistrationBean<>(dispatchServiceAuthenticationFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
+                                                    DispatchServiceAuthenticationFilter dispatchServiceAuthenticationFilter) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -57,10 +75,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**", "/error", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/v1/couriers/me", "/api/v1/couriers/me/**").hasAnyRole("COURIER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/couriers", "/api/v1/couriers/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/couriers/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/couriers").hasAnyRole("DISPATCHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/couriers/*").hasAnyRole("DISPATCHER", "ADMIN", "DISPATCH_SERVICE")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(dispatchServiceAuthenticationFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 
