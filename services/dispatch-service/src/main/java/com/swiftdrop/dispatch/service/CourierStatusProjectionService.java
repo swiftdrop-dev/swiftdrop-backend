@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 public class CourierStatusProjectionService {
@@ -26,7 +25,7 @@ public class CourierStatusProjectionService {
 
     @Transactional
     public void projectCourierStatus(UpdateCourierStatusProjectionRequest request) {
-        UUID courierId = request.getCourierId();
+        String courierId = request.getCourierId();
         Optional<CourierStatusCache> existingOpt = courierCacheRepository.findById(courierId);
 
         CourierStatusCache cache;
@@ -84,7 +83,7 @@ public class CourierStatusProjectionService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<CourierStatusCache> getCourier(UUID courierId) {
+    public Optional<CourierStatusCache> getCourier(String courierId) {
         return courierCacheRepository.findById(courierId);
     }
 }

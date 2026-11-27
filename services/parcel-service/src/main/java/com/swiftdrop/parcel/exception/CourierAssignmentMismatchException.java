@@ -2,6 +2,10 @@ package com.swiftdrop.parcel.exception;
 
 public class CourierAssignmentMismatchException extends RuntimeException {
     public CourierAssignmentMismatchException() {
-        super("Courier is not the currently assigned courier for this parcel");
+        this("Courier is not the currently assigned courier for this parcel");
+    }
+
+    public CourierAssignmentMismatchException(String message) {
+        super(message);
     }
 }

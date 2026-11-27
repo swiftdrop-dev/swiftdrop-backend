@@ -19,8 +19,8 @@ import java.util.UUID;
 public class CourierStatusCache {
 
     @Id
-    @Column(name = "courier_id", nullable = false)
-    private UUID courierId;
+    @Column(name = "courier_id", nullable = false, length = 64)
+    private String courierId;
 
     @Column(name = "courier_name", nullable = false)
     private String courierName;
@@ -92,11 +92,11 @@ public class CourierStatusCache {
         this.lastSyncAt = Instant.now();
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

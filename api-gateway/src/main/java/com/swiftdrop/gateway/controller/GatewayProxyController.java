@@ -183,6 +183,10 @@ public class GatewayProxyController {
         if (authCheck != null) {
             return authCheck;
         }
+        ResponseEntity<byte[]> courierAccess = checkCourierAccess(path);
+        if (courierAccess != null) {
+            return courierAccess;
+        }
 
         String targetBaseUrl;
 
@@ -296,6 +300,8 @@ public class GatewayProxyController {
         headers.remove("x-user-roles");
         headers.remove("X-User-Email");
         headers.remove("x-user-email");
+        headers.remove("X-Dispatch-Service-Token");
+        headers.remove("x-dispatch-service-token");
 
         org.springframework.security.core.Authentication auth =
                 org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -351,5 +357,37 @@ public class GatewayProxyController {
         }
 
         return null;
+    }
+
+    private ResponseEntity<byte[]> checkCourierAccess(String path) {
+        boolean selfService = path.equals("/api/v1/couriers/me") || path.startsWith("/api/v1/couriers/me/");
+        boolean directory = path.equals("/api/v1/couriers")
+                || (path.startsWith("/api/v1/couriers/")
+                && !selfService
+                && !path.equals("/api/v1/couriers/summary"));
+        if (!selfService && !directory) {
+            return null;
+        }
+
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof com.swiftdrop.gateway.security.AuthenticatedJwtPrincipal principal)) {
+            return ResponseEntity.status(401)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\"}}"
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        String role = principal.role() != null ? principal.role().toUpperCase(java.util.Locale.ROOT) : "";
+        boolean allowed = selfService
+                ? role.contains("COURIER") || role.contains("ADMIN")
+                : role.contains("DISPATCHER") || role.contains("ADMIN");
+        if (allowed) {
+            return null;
+        }
+        return ResponseEntity.status(403)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"success\":false,\"error\":{\"code\":\"FORBIDDEN\",\"message\":\"Access denied\"}}"
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 }

@@ -21,6 +21,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import com.swiftdrop.courier.security.DispatchServiceAuthenticationFilter;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -129,15 +131,29 @@ class CourierSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Direct access: Public courier lookup by ID succeeds without auth (200 OK)")
-    void publicLookupByIdSucceedsWithoutAuth() throws Exception {
+    @DisplayName("Directory: anonymous, customer, and courier callers cannot list couriers")
+    void directoryRequiresDispatcherOrAdmin() throws Exception {
+        when(courierService.getAllCouriers()).thenReturn(java.util.List.of(new CourierResponse(
+                "cou_001", "Nimal Senanayake", "motorcycle", "ABC-1234",
+                4.8, true, 3, 120)));
         when(courierService.getCourierById("cou_001")).thenReturn(new CourierResponse(
                 "cou_001", "Nimal Senanayake", "motorcycle", "ABC-1234",
                 4.8, true, 3, 120));
-
-        mockMvc.perform(get("/api/v1/couriers/cou_001"))
+        mockMvc.perform(get("/api/v1/couriers")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/couriers").header("Authorization", "Bearer " + validToken("customer")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/couriers").header("Authorization", "Bearer " + validToken("courier")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/couriers").header("Authorization", "Bearer " + validToken("dispatcher")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value("cou_001"));
+                .andExpect(jsonPath("$[0].id").value("cou_001"))
+                .andExpect(jsonPath("$[0].phone").doesNotExist());
+        mockMvc.perform(get("/api/v1/couriers/cou_001").header("Authorization", "Bearer " + validToken("admin")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/couriers/cou_001")
+                        .header(DispatchServiceAuthenticationFilter.HEADER, "test-dispatch-service-credential")
+                        .header("X-User-Roles", "ROLE_ADMIN"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

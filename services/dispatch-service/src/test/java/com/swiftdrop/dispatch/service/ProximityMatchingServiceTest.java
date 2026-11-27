@@ -16,10 +16,12 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.data.Offset.offset;
 import static org.mockito.Mockito.when;
 
@@ -39,7 +41,7 @@ class ProximityMatchingServiceTest {
     void setUp() {
         // Colombo Fort: 6.9344, 79.8428
         courierClose = new CourierStatusCache();
-        courierClose.setCourierId(UUID.randomUUID());
+        courierClose.setCourierId("cou_close");
         courierClose.setCourierName("Kamal Perera");
         courierClose.setCourierPhone("+94771111111");
         courierClose.setVehicleType(VehicleType.MOTORCYCLE);
@@ -52,7 +54,7 @@ class ProximityMatchingServiceTest {
 
         // Kandy: 7.2906, 80.6337 (> 100km away)
         courierFar = new CourierStatusCache();
-        courierFar.setCourierId(UUID.randomUUID());
+        courierFar.setCourierId("cou_far");
         courierFar.setCourierName("Nimal Silva");
         courierFar.setCourierPhone("+94772222222");
         courierFar.setVehicleType(VehicleType.MOTORCYCLE);
@@ -99,7 +101,7 @@ class ProximityMatchingServiceTest {
         BigDecimal pickupLat = new BigDecimal("6.9344");
         BigDecimal pickupLng = new BigDecimal("79.8428");
 
-        Set<UUID> excluded = Set.of(courierClose.getCourierId());
+        Set<String> excluded = Set.of(courierClose.getCourierId());
 
         List<CourierCandidateResponse> candidates = proximityMatchingService.findBestCandidates(
                 pickupLat, pickupLng, VehicleType.MOTORCYCLE, new BigDecimal("2.50"), excluded
@@ -115,5 +117,52 @@ class ProximityMatchingServiceTest {
         assertThat(proximityMatchingService.isVehicleCompatible(VehicleType.MOTORCYCLE, VehicleType.VAN)).isFalse();
         assertThat(proximityMatchingService.isVehicleCompatible(VehicleType.TRUCK, VehicleType.CAR)).isTrue();
         assertThat(proximityMatchingService.isVehicleCompatible(VehicleType.BICYCLE, VehicleType.MOTORCYCLE)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Should apply the requested radius and exclude couriers outside it")
+    void testFindBestCandidates_CustomRadius() {
+        when(courierCacheRepository.findByIsOnlineTrueAndIsAvailableTrue())
+                .thenReturn(Arrays.asList(courierClose, courierFar));
+
+        List<CourierCandidateResponse> inside = proximityMatchingService.findBestCandidates(
+                new BigDecimal("6.9344"), new BigDecimal("79.8428"), VehicleType.MOTORCYCLE,
+                new BigDecimal("1.00"), Collections.emptySet(), new BigDecimal("5"));
+        List<CourierCandidateResponse> tight = proximityMatchingService.findBestCandidates(
+                new BigDecimal("6.9344"), new BigDecimal("79.8428"), VehicleType.MOTORCYCLE,
+                new BigDecimal("1.00"), Collections.emptySet(), new BigDecimal("0.01"));
+
+        assertThat(inside).extracting(CourierCandidateResponse::getCourierId).containsExactly("cou_close");
+        assertThat(tight).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should exclude couriers without GPS or with a stale location")
+    void testFindBestCandidates_MissingOrStaleGps() {
+        courierClose.setCurrentLatitude(null);
+        courierFar.setCurrentLatitude(new BigDecimal("6.9340"));
+        courierFar.setCurrentLongitude(new BigDecimal("79.8430"));
+        courierFar.setLastLocationUpdatedAt(Instant.now().minus(20, ChronoUnit.MINUTES));
+        when(courierCacheRepository.findByIsOnlineTrueAndIsAvailableTrue())
+                .thenReturn(Arrays.asList(courierClose, courierFar));
+
+        List<CourierCandidateResponse> candidates = proximityMatchingService.findBestCandidates(
+                new BigDecimal("6.9344"), new BigDecimal("79.8428"), VehicleType.MOTORCYCLE,
+                new BigDecimal("1.00"), Collections.emptySet(), new BigDecimal("15"));
+
+        assertThat(candidates).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should reject a radius outside the supported range")
+    void testFindBestCandidates_InvalidRadius() {
+        assertThatThrownBy(() -> proximityMatchingService.findBestCandidates(
+                new BigDecimal("6.9344"), new BigDecimal("79.8428"), VehicleType.MOTORCYCLE,
+                new BigDecimal("1.00"), Collections.emptySet(), BigDecimal.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> proximityMatchingService.findBestCandidates(
+                new BigDecimal("6.9344"), new BigDecimal("79.8428"), VehicleType.MOTORCYCLE,
+                new BigDecimal("1.00"), Collections.emptySet(), new BigDecimal("31")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

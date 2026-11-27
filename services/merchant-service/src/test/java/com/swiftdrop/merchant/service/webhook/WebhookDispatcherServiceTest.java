@@ -65,7 +65,7 @@ class WebhookDispatcherServiceTest {
     @BeforeEach
     void setUp() throws IOException {
         signatureService = new WebhookSignatureService();
-        cryptoService = new WebhookSecretCryptoService("");
+        cryptoService = new WebhookSecretCryptoService("dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy1sb25nISE=");
         devSecurityValidator = new WebhookSecurityValidator(true, true);
         dispatcherService = new WebhookDispatcherService(
                 deliveryRepository,

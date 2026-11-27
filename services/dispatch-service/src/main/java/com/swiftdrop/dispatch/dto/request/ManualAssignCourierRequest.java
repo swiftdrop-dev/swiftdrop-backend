@@ -8,7 +8,9 @@ import java.util.UUID;
 public class ManualAssignCourierRequest {
 
     @NotNull(message = "Courier ID is required")
-    private UUID courierId;
+    @jakarta.validation.constraints.NotBlank(message = "Courier ID is required")
+    @Size(max = 64)
+    private String courierId;
 
     @Size(max = 500)
     private String dispatcherNotes;
@@ -16,16 +18,16 @@ public class ManualAssignCourierRequest {
     public ManualAssignCourierRequest() {
     }
 
-    public ManualAssignCourierRequest(UUID courierId, String dispatcherNotes) {
+    public ManualAssignCourierRequest(String courierId, String dispatcherNotes) {
         this.courierId = courierId;
         this.dispatcherNotes = dispatcherNotes;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

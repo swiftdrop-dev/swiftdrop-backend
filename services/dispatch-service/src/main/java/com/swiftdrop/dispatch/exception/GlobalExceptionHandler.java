@@ -3,6 +3,7 @@ package com.swiftdrop.dispatch.exception;
 import com.swiftdrop.dispatch.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -36,6 +37,25 @@ public class GlobalExceptionHandler {
         log.warn("Duplicate resource: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AssignmentConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAssignmentConflict(AssignmentConflictException ex) {
+        log.warn("Assignment conflict: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(OptimisticLockingFailureException ex) {
+        log.warn("Concurrent dispatch update rejected");
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("The dispatch job changed. Refresh and try again."));
+    }
+
+    @ExceptionHandler(CourierDirectoryUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDirectoryUnavailable(CourierDirectoryUnavailableException ex) {
+        log.warn("Courier directory unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiResponse.error(ex.getMessage()));
     }
 
     @ExceptionHandler(InvalidDispatchStateException.class)

@@ -11,11 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class ProximityMatchingService {
@@ -23,6 +24,7 @@ public class ProximityMatchingService {
     private static final Logger log = LoggerFactory.getLogger(ProximityMatchingService.class);
     private static final double EARTH_RADIUS_KM = 6371.0;
     private static final double MAX_DISPATCH_RADIUS_KM = 30.0;
+    private static final long LOCATION_FRESHNESS_MINUTES = 15;
 
     private final CourierStatusCacheRepository courierCacheRepository;
 
@@ -36,7 +38,22 @@ public class ProximityMatchingService {
             BigDecimal pickupLng,
             VehicleType requiredVehicle,
             BigDecimal parcelWeightKg,
-            Set<UUID> excludedCourierIds) {
+            Set<String> excludedCourierIds) {
+        return findBestCandidates(pickupLat, pickupLng, requiredVehicle, parcelWeightKg, excludedCourierIds, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourierCandidateResponse> findBestCandidates(
+            BigDecimal pickupLat,
+            BigDecimal pickupLng,
+            VehicleType requiredVehicle,
+            BigDecimal parcelWeightKg,
+            Set<String> excludedCourierIds,
+            BigDecimal maxRadiusKm) {
+        double radiusKm = resolveRadiusKm(maxRadiusKm);
+        if (pickupLat == null || pickupLng == null) {
+            return List.of();
+        }
 
         List<CourierStatusCache> onlineCouriers = courierCacheRepository.findByIsOnlineTrueAndIsAvailableTrue();
         List<CourierCandidateResponse> candidates = new ArrayList<>();
@@ -58,7 +75,7 @@ public class ProximityMatchingService {
             }
 
             // Check GPS coordinates present
-            if (courier.getCurrentLatitude() == null || courier.getCurrentLongitude() == null) {
+            if (courier.getCurrentLatitude() == null || courier.getCurrentLongitude() == null || isStaleLocation(courier)) {
                 continue;
             }
 
@@ -68,7 +85,7 @@ public class ProximityMatchingService {
             );
 
             // Distance filter
-            if (distanceKm > MAX_DISPATCH_RADIUS_KM) {
+            if (distanceKm > radiusKm) {
                 continue;
             }
 
@@ -94,6 +111,21 @@ public class ProximityMatchingService {
 
         log.info("Found {} eligible courier candidates for pickup [{}, {}]", candidates.size(), pickupLat, pickupLng);
         return candidates;
+    }
+
+    private double resolveRadiusKm(BigDecimal maxRadiusKm) {
+        if (maxRadiusKm == null) {
+            return MAX_DISPATCH_RADIUS_KM;
+        }
+        if (maxRadiusKm.compareTo(BigDecimal.ZERO) <= 0 || maxRadiusKm.doubleValue() > MAX_DISPATCH_RADIUS_KM) {
+            throw new IllegalArgumentException("maxRadiusKm must be greater than 0 and at most " + (int) MAX_DISPATCH_RADIUS_KM);
+        }
+        return maxRadiusKm.doubleValue();
+    }
+
+    private boolean isStaleLocation(CourierStatusCache courier) {
+        Instant updatedAt = courier.getLastLocationUpdatedAt();
+        return updatedAt != null && updatedAt.isBefore(Instant.now().minus(LOCATION_FRESHNESS_MINUTES, ChronoUnit.MINUTES));
     }
 
     public double calculateHaversineDistanceKm(double lat1, double lon1, double lat2, double lon2) {

@@ -5,12 +5,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 public class UpdateCourierStatusProjectionRequest {
 
     @NotNull(message = "Courier ID is required")
-    private UUID courierId;
+    @NotBlank(message = "Courier ID is required")
+    private String courierId;
 
     @NotBlank(message = "Courier name is required")
     private String courierName;
@@ -37,11 +37,11 @@ public class UpdateCourierStatusProjectionRequest {
     public UpdateCourierStatusProjectionRequest() {
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

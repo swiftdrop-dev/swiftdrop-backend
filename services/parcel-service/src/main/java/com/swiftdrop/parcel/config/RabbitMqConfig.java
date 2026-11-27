@@ -69,13 +69,6 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public Binding dispatchAssignedBinding() {
-        return BindingBuilder.bind(dispatchEventsQueue())
-                .to(swiftDropExchange())
-                .with("dispatch.assigned");
-    }
-
-    @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }

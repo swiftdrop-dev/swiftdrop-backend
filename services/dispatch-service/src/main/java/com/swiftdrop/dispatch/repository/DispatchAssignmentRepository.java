@@ -14,7 +14,7 @@ public interface DispatchAssignmentRepository extends JpaRepository<DispatchAssi
 
     List<DispatchAssignment> findByDispatchJobIdOrderByAttemptNumberDesc(UUID dispatchJobId);
 
-    List<DispatchAssignment> findByCourierIdOrderByOfferedAtDesc(UUID courierId);
+    List<DispatchAssignment> findByCourierIdOrderByOfferedAtDesc(String courierId);
 
     Optional<DispatchAssignment> findFirstByDispatchJobIdAndDecisionOrderByAttemptNumberDesc(
             UUID dispatchJobId, AssignmentDecision decision);

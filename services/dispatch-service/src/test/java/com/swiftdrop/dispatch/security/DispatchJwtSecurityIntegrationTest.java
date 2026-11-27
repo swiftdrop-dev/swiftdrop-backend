@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -70,6 +71,25 @@ class DispatchJwtSecurityIntegrationTest {
         mockMvc.perform(get("/security-test/principal")
                         .header(HttpHeaders.AUTHORIZATION, bearer("dispatcher", Instant.now().plusSeconds(300)), "Bearer second"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unauthorizedCallersCannotAssignCouriers() throws Exception {
+        String body = "{\"courierId\":\"00000000-0000-0000-0000-000000000002\",\"dispatcherNotes\":\"offer\"}";
+        mockMvc.perform(post("/api/v1/dispatch/jobs/00000000-0000-0000-0000-000000000001/assign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/dispatch/jobs/00000000-0000-0000-0000-000000000001/assign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body)
+                        .header(HttpHeaders.AUTHORIZATION, bearer("customer", Instant.now().plusSeconds(300))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/dispatch/jobs/00000000-0000-0000-0000-000000000001/assign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body)
+                        .header(HttpHeaders.AUTHORIZATION, bearer("courier", Instant.now().plusSeconds(300))))
+                .andExpect(status().isForbidden());
     }
 
     @Test

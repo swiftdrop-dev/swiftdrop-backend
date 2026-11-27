@@ -62,7 +62,22 @@ class GatewayProxyControllerTest {
     @Test
     void shouldHandleCourierProxyRouteWhenDownstreamOffline() throws Exception {
         mockMvc.perform(get("/api/v1/couriers/cou_001")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("disp@example.test", "dispatcher"))
                         .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void courierDirectoryRequiresDispatcherOrAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/couriers")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/couriers")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("cust@example.test", "customer")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/couriers")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("courier@example.test", "courier")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/couriers/me")
+                        .header(HttpHeaders.AUTHORIZATION, createTestBearer("courier@example.test", "courier")))
                 .andExpect(status().isServiceUnavailable());
     }
 

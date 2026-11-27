@@ -51,6 +51,7 @@ public class CreateDispatchJobRequest {
     @NotNull(message = "Parcel weight is required")
     @DecimalMin(value = "0.01", message = "Parcel weight must be positive")
     private BigDecimal parcelWeightKg;
+    private BigDecimal totalFee;
 
     private VehicleType requiredVehicleType = VehicleType.MOTORCYCLE;
 
@@ -161,6 +162,14 @@ public class CreateDispatchJobRequest {
 
     public void setParcelWeightKg(BigDecimal parcelWeightKg) {
         this.parcelWeightKg = parcelWeightKg;
+    }
+
+    public BigDecimal getTotalFee() {
+        return totalFee;
+    }
+
+    public void setTotalFee(BigDecimal totalFee) {
+        this.totalFee = totalFee;
     }
 
     public VehicleType getRequiredVehicleType() {
