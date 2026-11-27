@@ -6,15 +6,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /** Disposable local PostgreSQL cluster. It is not the shared or Neon database. */
 public final class DispatchPostgres {
 
-    private static final String BIN = "/usr/lib/postgresql/16/bin";
+    private static final String BIN = locateBin();
     private static final Path DATA_DIR;
     private static final int PORT;
 
@@ -61,6 +62,46 @@ public final class DispatchPostgres {
     }
 
     private DispatchPostgres() {
+    }
+
+    /**
+     * Prefer an explicit {@code DISPATCH_PG_BIN}, then PostgreSQL 16, then the newest
+     * installed server under {@code /usr/lib/postgresql}. CI installs that package
+     * because GitHub runners do not ship the server binaries.
+     */
+    private static String locateBin() {
+        String override = System.getenv("DISPATCH_PG_BIN");
+        if (isServerBin(override)) {
+            return override;
+        }
+        Path root = Path.of("/usr/lib/postgresql");
+        if (!Files.isDirectory(root)) {
+            throw new IllegalStateException("PostgreSQL server binaries were not found under " + root);
+        }
+        try (var versions = Files.list(root)) {
+            List<Path> bins = versions
+                    .filter(Files::isDirectory)
+                    .map(dir -> dir.resolve("bin"))
+                    .filter(DispatchPostgres::isServerBin)
+                    .toList();
+            return bins.stream()
+                    .filter(bin -> "16".equals(bin.getParent().getFileName().toString()))
+                    .findFirst()
+                    .or(() -> bins.stream().max(Comparator.comparing(bin -> bin.getParent().getFileName().toString())))
+                    .map(Path::toString)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "PostgreSQL server binaries were not found under " + root));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not locate PostgreSQL server binaries", exception);
+        }
+    }
+
+    private static boolean isServerBin(String directory) {
+        return directory != null && !directory.isBlank() && isServerBin(Path.of(directory));
+    }
+
+    private static boolean isServerBin(Path directory) {
+        return Files.isExecutable(directory.resolve("initdb")) && Files.isExecutable(directory.resolve("pg_ctl"));
     }
 
     public static String username() {
