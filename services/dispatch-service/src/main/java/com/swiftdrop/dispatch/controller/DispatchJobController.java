@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -65,9 +66,15 @@ public class DispatchJobController {
 
     @GetMapping("/unassigned")
     public ResponseEntity<ApiResponse<Page<DispatchJobSummaryResponse>>> getUnassignedJobs(
+            @RequestParam(value = "zoneCode", required = false) String zoneCode,
             @PageableDefault(size = 20) Pageable pageable) {
-        Page<DispatchJobSummaryResponse> page = jobService.getUnassignedJobs(pageable);
+        Page<DispatchJobSummaryResponse> page = jobService.getUnassignedJobs(zoneCode, pageable);
         return ResponseEntity.ok(ApiResponse.success(page));
+    }
+
+    @GetMapping("/active-assignments")
+    public ResponseEntity<ApiResponse<List<DispatchJobSummaryResponse>>> getActiveAssignments() {
+        return ResponseEntity.ok(ApiResponse.success(jobService.getActiveAssignments()));
     }
 
     @GetMapping("/summary")
@@ -90,14 +97,17 @@ public class DispatchJobController {
     }
 
     @GetMapping("/{id}/candidates")
-    public ResponseEntity<ApiResponse<List<CourierCandidateResponse>>> getCandidates(@PathVariable("id") UUID id) {
+    public ResponseEntity<ApiResponse<List<CourierCandidateResponse>>> getCandidates(
+            @PathVariable("id") UUID id,
+            @RequestParam(value = "maxRadiusKm", required = false) BigDecimal maxRadiusKm) {
         DispatchJob job = jobService.getJobEntity(id);
         List<CourierCandidateResponse> candidates = proximityMatchingService.findBestCandidates(
                 job.getPickupLatitude(),
                 job.getPickupLongitude(),
                 job.getRequiredVehicleType(),
                 job.getParcelWeightKg(),
-                job.getAssignments().stream().map(a -> a.getCourierId()).collect(Collectors.toSet())
+                job.getAssignments().stream().map(a -> a.getCourierId()).collect(Collectors.toSet()),
+                maxRadiusKm
         );
         return ResponseEntity.ok(ApiResponse.success(candidates));
     }

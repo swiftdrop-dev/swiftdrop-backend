@@ -77,6 +77,11 @@ public class DispatchMapper {
         response.setCourierId(job.getCourierId());
         response.setPickupCity(job.getPickupCity());
         response.setDeliveryCity(job.getDeliveryCity());
+        response.setPickupLatitude(job.getPickupLatitude());
+        response.setPickupLongitude(job.getPickupLongitude());
+        response.setDeliveryLatitude(job.getDeliveryLatitude());
+        response.setDeliveryLongitude(job.getDeliveryLongitude());
+        response.setTotalFee(job.getTotalFee());
         response.setParcelWeightKg(job.getParcelWeightKg());
         response.setRequiredVehicleType(job.getRequiredVehicleType());
         response.setPriority(job.getPriority());

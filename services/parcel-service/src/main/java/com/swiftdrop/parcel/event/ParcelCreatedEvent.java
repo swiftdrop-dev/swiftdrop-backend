@@ -26,6 +26,7 @@ public class ParcelCreatedEvent implements Serializable {
     private Boolean fragile;
     private String priority;
     private String zoneCode;
+    private BigDecimal totalFee;
 
     public ParcelCreatedEvent() {
     }
@@ -192,5 +193,13 @@ public class ParcelCreatedEvent implements Serializable {
 
     public void setZoneCode(String zoneCode) {
         this.zoneCode = zoneCode;
+    }
+
+    public BigDecimal getTotalFee() {
+        return totalFee;
+    }
+
+    public void setTotalFee(BigDecimal totalFee) {
+        this.totalFee = totalFee;
     }
 }

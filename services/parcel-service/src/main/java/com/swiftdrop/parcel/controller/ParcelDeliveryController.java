@@ -12,6 +12,7 @@ import com.swiftdrop.parcel.dto.response.ParcelStatusUpdateResponse;
 import com.swiftdrop.parcel.entity.Parcel;
 import com.swiftdrop.parcel.entity.ParcelAssignment;
 import com.swiftdrop.parcel.entity.ParcelStatusHistory;
+import com.swiftdrop.parcel.exception.CourierAssignmentMismatchException;
 import com.swiftdrop.parcel.exception.InvalidRequestException;
 import com.swiftdrop.parcel.otp.OtpChallengeReceipt;
 import com.swiftdrop.parcel.otp.OtpChallengeService;
@@ -19,6 +20,8 @@ import com.swiftdrop.parcel.otp.OtpVerificationResult;
 import com.swiftdrop.parcel.photo.DeliveryPhotoProofReceipt;
 import com.swiftdrop.parcel.photo.DeliveryPhotoProofService;
 import com.swiftdrop.parcel.repository.ParcelAssignmentRepository;
+import com.swiftdrop.parcel.security.CurrentUser;
+import com.swiftdrop.parcel.security.UserPrincipal;
 import com.swiftdrop.parcel.repository.ParcelRepository;
 import com.swiftdrop.parcel.service.DeliveryCompletionResult;
 import com.swiftdrop.parcel.service.DeliveryCompletionService;
@@ -27,14 +30,11 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -86,8 +86,6 @@ public class ParcelDeliveryController {
 
     @GetMapping("/me/assigned-deliveries")
     public ResponseEntity<ParcelPageResponse<AssignedDelivery>> getAssignedDeliveries(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -98,7 +96,7 @@ public class ParcelDeliveryController {
             throw new InvalidRequestException("Page size must be between 1 and 100");
         }
 
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, null);
+        String trustedCourierId = requireCourierId();
         var pageable = PageRequest.of(page, size);
         var assignmentPage = assignmentRepository.findByCourierIdAndUnassignedAtIsNullOrderByAssignedAtDesc(
                 trustedCourierId, pageable);
@@ -131,12 +129,8 @@ public class ParcelDeliveryController {
     }
 
     @PostMapping("/{id}/delivery-otp")
-    public ResponseEntity<OtpChallengeReceipt> requestDeliveryOtp(
-            @PathVariable String id,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId) {
-
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, id);
+    public ResponseEntity<OtpChallengeReceipt> requestDeliveryOtp(@PathVariable String id) {
+        String trustedCourierId = requireCourierId();
         OtpChallengeReceipt receipt = otpChallengeService.issue(id, trustedCourierId);
         return ResponseEntity.ok(receipt);
     }
@@ -144,20 +138,11 @@ public class ParcelDeliveryController {
     @PostMapping("/{id}/delivery-otp/verify")
     public ResponseEntity<OtpVerificationResponse> verifyDeliveryOtp(
             @PathVariable String id,
-            @Valid @RequestBody OtpVerificationRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId) {
+            @Valid @RequestBody OtpVerificationRequest request) {
 
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, id);
-        String code = request.code();
-        if ("AUTO".equalsIgnoreCase(code) || "000000".equals(code)) {
-            String recent = com.swiftdrop.parcel.otp.LocalOtpDeliveryGateway.getRecentCode(request.challengeId());
-            if (recent != null) {
-                code = recent;
-            }
-        }
+        String trustedCourierId = requireCourierId();
         OtpVerificationResult result = otpChallengeService.verify(
-                id, request.challengeId(), trustedCourierId, code.toCharArray());
+                id, request.challengeId(), trustedCourierId, request.code().toCharArray());
         return ResponseEntity.ok(new OtpVerificationResponse(
                 result.challengeId(), result.outcome(), result.verifiedAt()));
     }
@@ -166,15 +151,13 @@ public class ParcelDeliveryController {
     public ResponseEntity<DeliveryPhotoProofResponse> uploadDeliveryPhoto(
             @PathVariable String id,
             @RequestParam("assignmentId") Long assignmentId,
-            @RequestParam("photo") MultipartFile photo,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId) throws IOException {
+            @RequestParam("photo") MultipartFile photo) throws IOException {
 
         if (photo.isEmpty()) {
             throw new InvalidRequestException("Photo file must not be empty");
         }
 
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, id);
+        String trustedCourierId = requireCourierId();
         DeliveryPhotoProofReceipt receipt = photoProofService.upload(
                 id, assignmentId, trustedCourierId, photo.getContentType(), photo.getBytes());
 
@@ -185,11 +168,9 @@ public class ParcelDeliveryController {
     @PostMapping("/{id}/complete")
     public ResponseEntity<DeliveryCompletionResponse> completeDelivery(
             @PathVariable String id,
-            @Valid @RequestBody DeliveryCompletionRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId) {
+            @Valid @RequestBody DeliveryCompletionRequest request) {
 
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, id);
+        String trustedCourierId = requireCourierId();
         DeliveryCompletionResult result = completionService.complete(
                 id, request.challengeId(), request.photoProofId(), trustedCourierId);
 
@@ -200,11 +181,9 @@ public class ParcelDeliveryController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ParcelStatusUpdateResponse> updateParcelStatus(
             @PathVariable String id,
-            @Valid @RequestBody ParcelStatusUpdateRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String courierId) {
+            @Valid @RequestBody ParcelStatusUpdateRequest request) {
 
-        String trustedCourierId = resolveCourierId(headerUserId, courierId, id);
+        String trustedCourierId = requireCourierId();
         try {
             ParcelStatusHistory history = statusService.updateStatus(
                     id, trustedCourierId, request.status(), request.failureReason());
@@ -227,23 +206,11 @@ public class ParcelDeliveryController {
         }
     }
 
-    private String resolveCourierId(String headerUserId, String courierId, String parcelId) {
-        if (headerUserId != null && !headerUserId.isBlank()) {
-            return headerUserId;
+    private String requireCourierId() {
+        UserPrincipal principal = CurrentUser.require();
+        if (!CurrentUser.isCourier(principal)) {
+            throw new CourierAssignmentMismatchException("Courier role is required");
         }
-        if (courierId != null && !courierId.isBlank()) {
-            return courierId;
-        }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getName() != null && !auth.getName().isBlank() && !"anonymousUser".equals(auth.getName())) {
-            return auth.getName();
-        }
-        if (parcelId != null) {
-            var active = assignmentRepository.findByParcelIdAndUnassignedAtIsNull(parcelId);
-            if (active.isPresent()) {
-                return active.get().getCourierId();
-            }
-        }
-        return "cou_default";
+        return principal.getId().toString();
     }
 }

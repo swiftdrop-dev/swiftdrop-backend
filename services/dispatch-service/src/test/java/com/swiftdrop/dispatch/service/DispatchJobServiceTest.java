@@ -1,6 +1,8 @@
 package com.swiftdrop.dispatch.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.dispatch.client.CourierDirectoryClient;
+import com.swiftdrop.dispatch.client.CourierSnapshot;
 import com.swiftdrop.dispatch.dto.request.CourierOfferDecisionRequest;
 import com.swiftdrop.dispatch.dto.request.CreateDispatchJobRequest;
 import com.swiftdrop.dispatch.dto.request.ManualAssignCourierRequest;
@@ -12,6 +14,9 @@ import com.swiftdrop.dispatch.entity.enums.AssignmentDecision;
 import com.swiftdrop.dispatch.entity.enums.DispatchPriority;
 import com.swiftdrop.dispatch.entity.enums.DispatchStatus;
 import com.swiftdrop.dispatch.entity.enums.VehicleType;
+import com.swiftdrop.dispatch.exception.AssignmentConflictException;
+import com.swiftdrop.dispatch.exception.CourierDirectoryUnavailableException;
+import com.swiftdrop.dispatch.exception.InvalidDispatchStateException;
 import com.swiftdrop.dispatch.mapper.DispatchMapper;
 import com.swiftdrop.dispatch.repository.CourierStatusCacheRepository;
 import com.swiftdrop.dispatch.repository.DispatchAssignmentRepository;
@@ -33,8 +38,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,6 +67,9 @@ class DispatchJobServiceTest {
     @Mock
     private OutboxEventService outboxEventService;
 
+    @Mock
+    private CourierDirectoryClient courierDirectoryClient;
+
     @Spy
     private DispatchMapper dispatchMapper = new DispatchMapper();
 
@@ -70,14 +81,14 @@ class DispatchJobServiceTest {
 
     private UUID jobId;
     private UUID parcelId;
-    private UUID courierId;
+    private String courierId;
     private UUID dispatcherId;
 
     @BeforeEach
     void setUp() {
         jobId = UUID.randomUUID();
         parcelId = UUID.randomUUID();
-        courierId = UUID.randomUUID();
+        courierId = "cou_001";
         dispatcherId = UUID.randomUUID();
     }
 
@@ -126,8 +137,9 @@ class DispatchJobServiceTest {
         job.setPickupLongitude(new BigDecimal("79.8612"));
         job.setStatus(DispatchStatus.PENDING_DISPATCH);
 
-        when(jobRepository.findById(jobId)).thenReturn(Optional.of(job));
-        when(courierCacheRepository.findById(courierId)).thenReturn(Optional.of(new CourierStatusCache()));
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(job));
+        when(courierDirectoryClient.requireEligible(courierId)).thenReturn(new CourierSnapshot(courierId, true));
+        when(courierCacheRepository.findByCourierIdForUpdate(courierId)).thenReturn(Optional.of(assignableCourier(courierId)));
         when(jobRepository.save(any(DispatchJob.class))).thenAnswer(i -> i.getArgument(0));
 
         ManualAssignCourierRequest request = new ManualAssignCourierRequest(courierId, "Urgent pickup request");
@@ -138,6 +150,97 @@ class DispatchJobServiceTest {
         assertThat(response.getCourierId()).isEqualTo(courierId);
         assertThat(response.getOfferExpiresAt()).isAfter(Instant.now());
         verify(outboxEventService).publishEvent(eq("DispatchJob"), eq(jobId.toString()), eq("DispatchJobAssignedEvent"), any());
+    }
+
+    @Test
+    @DisplayName("Should reject an offer when the courier projection is unavailable")
+    void testManualAssign_UnavailableCourier() {
+        DispatchJob job = pendingJob();
+        CourierStatusCache courier = assignableCourier(courierId);
+        courier.setIsAvailable(false);
+
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(job));
+        when(courierDirectoryClient.requireEligible(courierId)).thenReturn(new CourierSnapshot(courierId, true));
+        when(courierCacheRepository.findByCourierIdForUpdate(courierId)).thenReturn(Optional.of(courier));
+
+        ManualAssignCourierRequest request = new ManualAssignCourierRequest(courierId, "Unavailable");
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, request, dispatcherId))
+                .isInstanceOf(InvalidDispatchStateException.class)
+                .hasMessage("Courier is not available for assignment");
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject assignment when the job is no longer awaiting an offer")
+    void testManualAssign_Conflict() {
+        DispatchJob job = pendingJob();
+        job.setStatus(DispatchStatus.ACCEPTED);
+        job.setCourierId("cou_other");
+
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(job));
+
+        ManualAssignCourierRequest request = new ManualAssignCourierRequest(courierId, "Late offer");
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, request, dispatcherId))
+                .isInstanceOf(InvalidDispatchStateException.class)
+                .hasMessageContaining("Cannot assign courier when job status is: ACCEPTED");
+        verify(courierCacheRepository, never()).findByCourierIdForUpdate(any());
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject an offer when the courier directory does not confirm the courier")
+    void testManualAssign_DirectoryRejectsCourier() {
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(pendingJob()));
+        doThrow(new InvalidDispatchStateException("Courier is not eligible for assignment"))
+                .when(courierDirectoryClient).requireEligible(courierId);
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, new ManualAssignCourierRequest(courierId, "offer"), dispatcherId))
+                .isInstanceOf(InvalidDispatchStateException.class)
+                .hasMessage("Courier is not eligible for assignment");
+        verify(courierCacheRepository, never()).findByCourierIdForUpdate(any());
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should leave the job unchanged when the courier directory is unavailable")
+    void testManualAssign_DirectoryUnavailable() {
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(pendingJob()));
+        doThrow(new CourierDirectoryUnavailableException("Courier directory is unavailable"))
+                .when(courierDirectoryClient).requireEligible(courierId);
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, new ManualAssignCourierRequest(courierId, "offer"), dispatcherId))
+                .isInstanceOf(CourierDirectoryUnavailableException.class)
+                .hasMessage("Courier directory is unavailable");
+        verify(courierCacheRepository, never()).findByCourierIdForUpdate(any());
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject an offer when the courier has no dispatch status row")
+    void testManualAssign_MissingCache() {
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(pendingJob()));
+        when(courierDirectoryClient.requireEligible(courierId)).thenReturn(new CourierSnapshot(courierId, true));
+        when(courierCacheRepository.findByCourierIdForUpdate(courierId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, new ManualAssignCourierRequest(courierId, "offer"), dispatcherId))
+                .isInstanceOf(InvalidDispatchStateException.class)
+                .hasMessage("Courier is not eligible for assignment");
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject an offer when the courier already has an active assignment")
+    void testManualAssign_ConflictingCourier() {
+        when(jobRepository.findByIdForUpdate(jobId)).thenReturn(Optional.of(pendingJob()));
+        when(courierDirectoryClient.requireEligible(courierId)).thenReturn(new CourierSnapshot(courierId, true));
+        when(courierCacheRepository.findByCourierIdForUpdate(courierId)).thenReturn(Optional.of(assignableCourier(courierId)));
+        when(jobRepository.existsByCourierIdAndStatusInAndIdNot(eq(courierId), any(), eq(jobId))).thenReturn(true);
+
+        assertThatThrownBy(() -> jobService.manualAssignCourier(jobId, new ManualAssignCourierRequest(courierId, "offer"), dispatcherId))
+                .isInstanceOf(AssignmentConflictException.class);
+        verify(jobRepository, never()).save(any());
     }
 
     @Test
@@ -198,5 +301,24 @@ class DispatchJobServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(DispatchStatus.DECLINED);
         verify(outboxEventService).publishEvent(eq("DispatchJob"), eq(jobId.toString()), eq("DispatchJobDeclinedEvent"), any());
+    }
+
+    private DispatchJob pendingJob() {
+        DispatchJob job = new DispatchJob();
+        job.setId(jobId);
+        job.setParcelId(parcelId);
+        job.setTrackingNumber("SD-123");
+        job.setPickupLatitude(new BigDecimal("6.9271"));
+        job.setPickupLongitude(new BigDecimal("79.8612"));
+        job.setStatus(DispatchStatus.PENDING_DISPATCH);
+        return job;
+    }
+
+    private CourierStatusCache assignableCourier(String id) {
+        CourierStatusCache courier = new CourierStatusCache();
+        courier.setCourierId(id);
+        courier.setIsOnline(true);
+        courier.setIsAvailable(true);
+        return courier;
     }
 }

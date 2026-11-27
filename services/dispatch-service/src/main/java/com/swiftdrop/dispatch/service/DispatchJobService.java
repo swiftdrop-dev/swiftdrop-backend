@@ -2,6 +2,7 @@ package com.swiftdrop.dispatch.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.dispatch.client.CourierDirectoryClient;
 import com.swiftdrop.dispatch.dto.request.CourierOfferDecisionRequest;
 import com.swiftdrop.dispatch.dto.request.CreateDispatchJobRequest;
 import com.swiftdrop.dispatch.dto.request.ManualAssignCourierRequest;
@@ -14,6 +15,7 @@ import com.swiftdrop.dispatch.entity.DispatchZone;
 import com.swiftdrop.dispatch.entity.enums.AssignmentDecision;
 import com.swiftdrop.dispatch.entity.enums.DispatchStatus;
 import com.swiftdrop.dispatch.entity.enums.DispatchType;
+import com.swiftdrop.dispatch.exception.AssignmentConflictException;
 import com.swiftdrop.dispatch.exception.DuplicateResourceException;
 import com.swiftdrop.dispatch.exception.InvalidDispatchStateException;
 import com.swiftdrop.dispatch.exception.ResourceNotFoundException;
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -46,6 +49,11 @@ public class DispatchJobService {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchJobService.class);
     private static final long OFFER_TTL_SECONDS = 60; // 60s offer window
+    private static final List<DispatchStatus> ACTIVE_ASSIGNMENTS = List.of(
+            DispatchStatus.ASSIGNED_PENDING_ACCEPTANCE,
+            DispatchStatus.ACCEPTED,
+            DispatchStatus.IN_PROGRESS
+    );
 
     private final DispatchJobRepository jobRepository;
     private final DispatchAssignmentRepository assignmentRepository;
@@ -55,6 +63,7 @@ public class DispatchJobService {
     private final OutboxEventService outboxEventService;
     private final DispatchMapper dispatchMapper;
     private final ObjectMapper objectMapper;
+    private final CourierDirectoryClient courierDirectoryClient;
 
     public DispatchJobService(DispatchJobRepository jobRepository,
                               DispatchAssignmentRepository assignmentRepository,
@@ -63,7 +72,8 @@ public class DispatchJobService {
                               ProximityMatchingService proximityMatchingService,
                               OutboxEventService outboxEventService,
                               DispatchMapper dispatchMapper,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              CourierDirectoryClient courierDirectoryClient) {
         this.jobRepository = jobRepository;
         this.assignmentRepository = assignmentRepository;
         this.zoneRepository = zoneRepository;
@@ -72,6 +82,7 @@ public class DispatchJobService {
         this.outboxEventService = outboxEventService;
         this.dispatchMapper = dispatchMapper;
         this.objectMapper = objectMapper;
+        this.courierDirectoryClient = courierDirectoryClient;
     }
 
     @Transactional
@@ -93,6 +104,7 @@ public class DispatchJobService {
         job.setDeliveryLatitude(request.getDeliveryLatitude());
         job.setDeliveryLongitude(request.getDeliveryLongitude());
         job.setParcelWeightKg(request.getParcelWeightKg());
+        job.setTotalFee(request.getTotalFee());
         job.setRequiredVehicleType(request.getRequiredVehicleType());
         job.setPriority(request.getPriority());
         job.setDispatchType(DispatchType.MANUAL);
@@ -122,7 +134,8 @@ public class DispatchJobService {
 
     @Transactional
     public DispatchJobResponse manualAssignCourier(UUID jobId, ManualAssignCourierRequest request, UUID dispatcherId) {
-        DispatchJob job = getJobEntity(jobId);
+        DispatchJob job = jobRepository.findByIdForUpdate(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Dispatch job not found: " + jobId));
 
         if (job.getStatus() != DispatchStatus.PENDING_DISPATCH &&
                 job.getStatus() != DispatchStatus.DECLINED &&
@@ -130,10 +143,20 @@ public class DispatchJobService {
             throw new InvalidDispatchStateException("Cannot assign courier when job status is: " + job.getStatus());
         }
 
-        UUID courierId = request.getCourierId();
-        Optional<CourierStatusCache> courierOpt = courierCacheRepository.findById(courierId);
+        String courierId = request.getCourierId();
+        courierDirectoryClient.requireEligible(courierId);
+        CourierStatusCache courier = courierCacheRepository.findByCourierIdForUpdate(courierId)
+                .orElseThrow(() -> new InvalidDispatchStateException("Courier is not eligible for assignment"));
+        if (!isAssignable(courier)) {
+            throw new InvalidDispatchStateException("Courier is not available for assignment");
+        }
+        if (jobRepository.existsByCourierIdAndStatusInAndIdNot(courierId, ACTIVE_ASSIGNMENTS, jobId)) {
+            throw new AssignmentConflictException("Courier already has an active offer or assignment");
+        }
+        Optional<CourierStatusCache> courierOpt = Optional.of(courier);
         BigDecimal offeredDistance = null;
-        if (courierOpt.isPresent() && courierOpt.get().getCurrentLatitude() != null) {
+        if (courierOpt.isPresent() && courierOpt.get().getCurrentLatitude() != null
+                && job.getPickupLatitude() != null && job.getPickupLongitude() != null) {
             double distance = proximityMatchingService.calculateHaversineDistanceKm(
                     job.getPickupLatitude().doubleValue(), job.getPickupLongitude().doubleValue(),
                     courierOpt.get().getCurrentLatitude().doubleValue(), courierOpt.get().getCurrentLongitude().doubleValue()
@@ -185,8 +208,12 @@ public class DispatchJobService {
         return dispatchMapper.toJobResponse(saved);
     }
 
+    private boolean isAssignable(CourierStatusCache courier) {
+        return Boolean.TRUE.equals(courier.getIsOnline()) && Boolean.TRUE.equals(courier.getIsAvailable());
+    }
+
     @Transactional
-    public DispatchJobResponse handleCourierDecision(UUID jobId, UUID courierId, CourierOfferDecisionRequest request) {
+    public DispatchJobResponse handleCourierDecision(UUID jobId, String courierId, CourierOfferDecisionRequest request) {
         DispatchJob job = getJobEntity(jobId);
 
         // Idempotency check: if courier re-submits matching decision, safely return current state
@@ -349,15 +376,47 @@ public class DispatchJobService {
     }
 
     @Transactional(readOnly = true)
-    public Page<DispatchJobSummaryResponse> getUnassignedJobs(Pageable pageable) {
-        return jobRepository.findByStatusIn(
+    public Page<DispatchJobSummaryResponse> getUnassignedJobs(String zoneCode, Pageable pageable) {
+        String zone = zoneCode == null || zoneCode.isBlank() ? null : zoneCode.trim();
+        return jobRepository.findUnassignedByZone(
                 Arrays.asList(DispatchStatus.PENDING_DISPATCH, DispatchStatus.DECLINED, DispatchStatus.EXPIRED),
+                zone,
                 pageable
         ).map(dispatchMapper::toJobSummaryResponse);
     }
 
     @Transactional(readOnly = true)
-    public List<DispatchJobSummaryResponse> getCourierJobs(UUID courierId) {
+    public List<DispatchJobSummaryResponse> getActiveAssignments() {
+        List<DispatchJobSummaryResponse> summaries = jobRepository.findByStatusIn(ACTIVE_ASSIGNMENTS).stream()
+                .map(dispatchMapper::toJobSummaryResponse)
+                .collect(Collectors.toList());
+        Set<String> courierIds = summaries.stream()
+                .map(DispatchJobSummaryResponse::getCourierId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+        if (courierIds.isEmpty()) {
+            return summaries;
+        }
+        Map<String, CourierStatusCache> locations = courierCacheRepository.findAllById(courierIds).stream()
+                .collect(Collectors.toMap(CourierStatusCache::getCourierId, cache -> cache));
+        Instant freshAfter = Instant.now().minus(15, ChronoUnit.MINUTES);
+        for (DispatchJobSummaryResponse summary : summaries) {
+            CourierStatusCache cache = locations.get(summary.getCourierId());
+            if (cache == null || cache.getCurrentLatitude() == null || cache.getCurrentLongitude() == null) {
+                continue;
+            }
+            Instant updatedAt = cache.getLastLocationUpdatedAt();
+            if (updatedAt != null && updatedAt.isBefore(freshAfter)) {
+                continue;
+            }
+            summary.setCourierLatitude(cache.getCurrentLatitude());
+            summary.setCourierLongitude(cache.getCurrentLongitude());
+        }
+        return summaries;
+    }
+
+    @Transactional(readOnly = true)
+    public List<DispatchJobSummaryResponse> getCourierJobs(String courierId) {
         return jobRepository.findByCourierIdAndStatusIn(
                 courierId,
                 Arrays.asList(DispatchStatus.ASSIGNED_PENDING_ACCEPTANCE, DispatchStatus.ACCEPTED, DispatchStatus.IN_PROGRESS)

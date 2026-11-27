@@ -1,6 +1,9 @@
 package com.swiftdrop.dispatch.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.dispatch.client.CourierDirectoryClient;
+import com.swiftdrop.dispatch.exception.CourierDirectoryUnavailableException;
+import com.swiftdrop.dispatch.exception.InvalidDispatchStateException;
 import com.swiftdrop.dispatch.dto.response.CourierCandidateResponse;
 import com.swiftdrop.dispatch.entity.DispatchAssignment;
 import com.swiftdrop.dispatch.entity.DispatchJob;
@@ -31,6 +34,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +53,9 @@ class AutoDispatchEngineTest {
 
     @Mock
     private OutboxEventService outboxEventService;
+
+    @Mock
+    private CourierDirectoryClient courierDirectoryClient;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
@@ -96,7 +104,7 @@ class AutoDispatchEngineTest {
     @Test
     @DisplayName("Should auto-assign best candidate courier for unassigned job")
     void testAutoAssignJob_Success() {
-        UUID courierId = UUID.randomUUID();
+        String courierId = "cou_001";
         CourierCandidateResponse candidate = new CourierCandidateResponse(
                 courierId, "John Courier", "+94771234567", VehicleType.MOTORCYCLE,
                 new BigDecimal("2.50"), 0, 4, 1.5
@@ -112,7 +120,43 @@ class AutoDispatchEngineTest {
         assertThat(job.getStatus()).isEqualTo(DispatchStatus.ASSIGNED_PENDING_ACCEPTANCE);
         assertThat(job.getCourierId()).isEqualTo(courierId);
         assertThat(job.getOfferExpiresAt()).isAfter(Instant.now());
+        verify(courierDirectoryClient).requireEligible(courierId);
         verify(outboxEventService).publishEvent(eq("DispatchJob"), eq(jobId.toString()), eq("DispatchJobAutoAssignedEvent"), any());
+    }
+
+    @Test
+    @DisplayName("Should leave a scheduled job unassigned when the directory reports the courier unavailable")
+    void testAutoAssignJob_UnavailableCourier() {
+        CourierCandidateResponse candidate = new CourierCandidateResponse(
+                "cou_001", "John Courier", "+94771234567", VehicleType.MOTORCYCLE,
+                new BigDecimal("2.50"), 0, 4, 1.5
+        );
+        when(proximityMatchingService.findBestCandidates(any(), any(), any(), any(), any()))
+                .thenReturn(List.of(candidate));
+        doThrow(new InvalidDispatchStateException("Courier is not eligible for assignment"))
+                .when(courierDirectoryClient).requireEligible("cou_001");
+
+        assertThat(autoDispatchEngine.autoAssignJob(job)).isFalse();
+        assertThat(job.getStatus()).isEqualTo(DispatchStatus.PENDING_DISPATCH);
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should leave a scheduled job unassigned when service authentication cannot reach the directory")
+    void testAutoAssignJob_DirectoryUnavailable() {
+        CourierCandidateResponse candidate = new CourierCandidateResponse(
+                "cou_001", "John Courier", "+94771234567", VehicleType.MOTORCYCLE,
+                new BigDecimal("2.50"), 0, 4, 1.5
+        );
+        when(proximityMatchingService.findBestCandidates(any(), any(), any(), any(), any()))
+                .thenReturn(List.of(candidate));
+        doThrow(new CourierDirectoryUnavailableException("Courier directory is unavailable"))
+                .when(courierDirectoryClient).requireEligible("cou_001");
+
+        assertThat(autoDispatchEngine.autoAssignJob(job)).isFalse();
+        assertThat(job.getStatus()).isEqualTo(DispatchStatus.PENDING_DISPATCH);
+        assertThat(job.getCourierId()).isNull();
+        verify(jobRepository, never()).save(any());
     }
 
     @Test

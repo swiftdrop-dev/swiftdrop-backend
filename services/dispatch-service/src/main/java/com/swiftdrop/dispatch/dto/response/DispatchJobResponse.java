@@ -18,7 +18,7 @@ public class DispatchJobResponse {
     private String trackingNumber;
     private UUID merchantId;
     private String zoneCode;
-    private UUID courierId;
+    private String courierId;
 
     private String pickupStreetAddress;
     private String pickupCity;
@@ -93,11 +93,11 @@ public class DispatchJobResponse {
         this.zoneCode = zoneCode;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

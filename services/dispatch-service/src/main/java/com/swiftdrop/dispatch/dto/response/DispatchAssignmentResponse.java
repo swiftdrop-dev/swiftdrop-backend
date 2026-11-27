@@ -10,7 +10,7 @@ public class DispatchAssignmentResponse {
 
     private UUID id;
     private UUID dispatchJobId;
-    private UUID courierId;
+    private String courierId;
     private Integer attemptNumber;
     private AssignmentDecision decision;
     private String decisionReason;
@@ -37,11 +37,11 @@ public class DispatchAssignmentResponse {
         this.dispatchJobId = dispatchJobId;
     }
 
-    public UUID getCourierId() {
+    public String getCourierId() {
         return courierId;
     }
 
-    public void setCourierId(UUID courierId) {
+    public void setCourierId(String courierId) {
         this.courierId = courierId;
     }
 

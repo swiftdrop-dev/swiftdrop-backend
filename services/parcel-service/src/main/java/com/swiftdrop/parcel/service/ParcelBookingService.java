@@ -2,8 +2,10 @@ package com.swiftdrop.parcel.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.parcel.client.PricingServiceClient;
 import com.swiftdrop.parcel.dto.request.CreateParcelBookingRequest;
 import com.swiftdrop.parcel.entity.Parcel;
+import com.swiftdrop.parcel.exception.InvalidRequestException;
 import com.swiftdrop.parcel.event.ParcelBookedApplicationEvent;
 import com.swiftdrop.parcel.event.ParcelCreatedEvent;
 import com.swiftdrop.parcel.repository.ParcelRepository;
@@ -27,15 +29,18 @@ public class ParcelBookingService {
     private final OutboxEventService outboxEventService;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final PricingServiceClient pricingServiceClient;
 
     public ParcelBookingService(ParcelRepository parcelRepository,
                                 OutboxEventService outboxEventService,
                                 ObjectMapper objectMapper,
-                                ApplicationEventPublisher applicationEventPublisher) {
+                                ApplicationEventPublisher applicationEventPublisher,
+                                PricingServiceClient pricingServiceClient) {
         this.parcelRepository = parcelRepository;
         this.outboxEventService = outboxEventService;
         this.objectMapper = objectMapper;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.pricingServiceClient = pricingServiceClient;
     }
 
     @Transactional
@@ -53,18 +58,14 @@ public class ParcelBookingService {
         parcel.changeStatus("CREATED");
 
         parcel.setSenderId(senderId);
-        parcel.setSenderName(request.recipientName());
-        parcel.setSenderPhone(request.recipientPhone());
+        parcel.setSenderName(blankToNull(request.senderName()));
+        parcel.setSenderPhone(blankToNull(request.senderPhone()));
         parcel.setPickupAddress(request.pickupAddress());
         parcel.setWeightKg(request.weightKg());
         parcel.setParcelSize(request.parcelSize() != null ? request.parcelSize() : "STANDARD");
         parcel.setDescription(request.description());
         parcel.setFragile(Boolean.TRUE.equals(request.fragile()));
-        if (request.totalFee() != null && request.totalFee().compareTo(BigDecimal.ZERO) > 0) {
-            parcel.setTotalFee(request.totalFee());
-        } else {
-            parcel.setTotalFee(null);
-        }
+        parcel.setTotalFee(authoritativeFee(request));
         parcel.setPaymentMethod(request.paymentMethod() != null ? request.paymentMethod() : "COD");
         parcel.setPaymentStatus("UNPAID");
         parcel.setTrackingNumber(trackingNumber);
@@ -91,6 +92,7 @@ public class ParcelBookingService {
             priority = "HIGH";
         }
         event.setPriority(priority);
+        event.setTotalFee(saved.getTotalFee());
 
         String payloadJson;
         try {
@@ -107,5 +109,25 @@ public class ParcelBookingService {
 
         log.info("Booked parcel [id={}, trackingNumber={}] and stored outbox event", saved.getId(), saved.getTrackingNumber());
         return saved;
+    }
+
+    private BigDecimal authoritativeFee(CreateParcelBookingRequest request) {
+        String fromZone = blankToNull(request.fromZoneCode());
+        String toZone = blankToNull(request.toZoneCode());
+        if (fromZone == null || toZone == null) {
+            throw new InvalidRequestException("Origin and destination zones are required");
+        }
+        return pricingServiceClient.calculateEstimate(
+                request.weightKg(),
+                fromZone,
+                toZone,
+                blankToNull(request.deliveryType()));
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

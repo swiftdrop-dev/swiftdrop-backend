@@ -15,6 +15,9 @@ import com.swiftdrop.parcel.repository.ParcelRepository;
 import com.swiftdrop.parcel.service.DeliveryCompletionResult;
 import com.swiftdrop.parcel.service.DeliveryCompletionService;
 import com.swiftdrop.parcel.service.ParcelStatusService;
+import com.swiftdrop.parcel.security.UserPrincipal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,6 +28,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -46,8 +51,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(ParcelRestExceptionHandler.class)
 class ParcelDeliveryControllerTest {
 
+    private static final UUID COURIER_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static final String COURIER = COURIER_ID.toString();
+
     @Autowired
     private MockMvc mockMvc;
+
+    @BeforeEach
+    void authenticateCourier() {
+        UserPrincipal principal = new UserPrincipal(COURIER_ID, "courier@swiftdrop.test", "courier");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
 
     @MockBean
     private ParcelRepository parcelRepository;
@@ -72,18 +92,18 @@ class ParcelDeliveryControllerTest {
 
     @Test
     void getsAssignedDeliveriesForCourier() throws Exception {
-        ParcelAssignment assignment = new ParcelAssignment("prc_001", "cou_001",
+        ParcelAssignment assignment = new ParcelAssignment("prc_001", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 Instant.parse("2026-11-22T08:00:00Z"), "dispatcher", "Auto");
-        Parcel parcel = new Parcel("prc_001", "cou_001", "SWF-2026-00112233", "in_transit",
+        Parcel parcel = new Parcel("prc_001", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "SWF-2026-00112233", "in_transit",
                 "2026-11-22", "Nimal", "+94771112233", "123 Main St");
 
-        when(assignmentRepository.findByCourierIdAndUnassignedAtIsNullOrderByAssignedAtDesc(eq("cou_001"), any(Pageable.class)))
+        when(assignmentRepository.findByCourierIdAndUnassignedAtIsNullOrderByAssignedAtDesc(eq("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(assignment)));
-        when(parcelRepository.findByIdInAndCourierId(List.of("prc_001"), "cou_001"))
+        when(parcelRepository.findByIdInAndCourierId(List.of("prc_001"), "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .thenReturn(List.of(parcel));
 
         mockMvc.perform(get("/api/v1/parcels/me/assigned-deliveries")
-                        .header("X-User-Id", "cou_001"))
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].parcelId").value("prc_001"))
@@ -96,12 +116,12 @@ class ParcelDeliveryControllerTest {
     @Test
     void requestsDeliveryOtpSuccessfully() throws Exception {
         UUID challengeId = UUID.randomUUID();
-        when(otpChallengeService.issue("prc_001", "cou_001"))
+        when(otpChallengeService.issue("prc_001", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .thenReturn(new OtpChallengeReceipt(challengeId, Instant.parse("2026-11-22T10:05:00Z"),
                         Instant.parse("2026-11-22T10:01:00Z"), "+94******567"));
 
         mockMvc.perform(post("/api/v1/parcels/prc_001/delivery-otp")
-                        .header("X-User-Id", "cou_001"))
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.challengeId").value(challengeId.toString()))
                 .andExpect(jsonPath("$.destinationMasked").value("+94******567"));
@@ -110,12 +130,12 @@ class ParcelDeliveryControllerTest {
     @Test
     void verifiesDeliveryOtp() throws Exception {
         UUID challengeId = UUID.randomUUID();
-        when(otpChallengeService.verify(eq("prc_001"), eq(challengeId), eq("cou_001"), any(char[].class)))
+        when(otpChallengeService.verify(eq("prc_001"), eq(challengeId), eq("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), any(char[].class)))
                 .thenReturn(new OtpVerificationResult(challengeId, OtpVerificationOutcome.VERIFIED,
                         Instant.parse("2026-11-22T10:02:00Z")));
 
         mockMvc.perform(post("/api/v1/parcels/prc_001/delivery-otp/verify")
-                        .header("X-User-Id", "cou_001")
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"challengeId\":\"" + challengeId + "\",\"code\":\"123456\"}"))
                 .andExpect(status().isOk())
@@ -130,13 +150,13 @@ class ParcelDeliveryControllerTest {
         MockMultipartFile file = new MockMultipartFile(
                 "photo", "photo.jpg", MediaType.IMAGE_JPEG_VALUE, "dummy-image-bytes".getBytes());
 
-        when(photoProofService.upload(eq("prc_001"), eq(10L), eq("cou_001"), eq("image/jpeg"), any(byte[].class)))
+        when(photoProofService.upload(eq("prc_001"), eq(10L), eq("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), eq("image/jpeg"), any(byte[].class)))
                 .thenReturn(new DeliveryPhotoProofReceipt(proofId, "jpeg", 17L, Instant.parse("2026-11-22T10:03:00Z")));
 
         mockMvc.perform(multipart("/api/v1/parcels/prc_001/delivery-photo")
                         .file(file)
                         .param("assignmentId", "10")
-                        .header("X-User-Id", "cou_001"))
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.proofId").value(proofId.toString()))
                 .andExpect(jsonPath("$.format").value("jpeg"))
@@ -148,12 +168,12 @@ class ParcelDeliveryControllerTest {
         UUID challengeId = UUID.randomUUID();
         UUID photoProofId = UUID.randomUUID();
 
-        when(completionService.complete("prc_001", challengeId, photoProofId, "cou_001"))
+        when(completionService.complete("prc_001", challengeId, photoProofId, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
                 .thenReturn(new DeliveryCompletionResult("prc_001", "delivered",
                         Instant.parse("2026-11-22T10:04:00Z")));
 
         mockMvc.perform(post("/api/v1/parcels/prc_001/complete")
-                        .header("X-User-Id", "cou_001")
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"challengeId\":\"" + challengeId + "\",\"photoProofId\":\"" + photoProofId + "\"}"))
                 .andExpect(status().isOk())
@@ -164,12 +184,12 @@ class ParcelDeliveryControllerTest {
 
     @Test
     void updatesParcelStatus() throws Exception {
-        when(statusService.updateStatus("prc_001", "cou_001", "in_transit", null))
+        when(statusService.updateStatus("prc_001", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "in_transit", null))
                 .thenReturn(new ParcelStatusHistory("prc_001", "picked_up", "in_transit",
-                        Instant.parse("2026-11-22T09:00:00Z"), "cou_001", null));
+                        Instant.parse("2026-11-22T09:00:00Z"), "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", null));
 
         mockMvc.perform(patch("/api/v1/parcels/prc_001/status")
-                        .header("X-User-Id", "cou_001")
+                        .header("X-User-Id", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"in_transit\"}"))
                 .andExpect(status().isOk())

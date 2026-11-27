@@ -24,6 +24,16 @@ public class ParcelRestExceptionHandler {
         return error(HttpStatus.NOT_FOUND, exception.getMessage());
     }
 
+    @ExceptionHandler(AuthenticationRequiredException.class)
+    public ResponseEntity<RestErrorResponse> handleAuthenticationRequired(AuthenticationRequiredException exception) {
+        return error(HttpStatus.UNAUTHORIZED, exception.getMessage());
+    }
+
+    @ExceptionHandler(PricingUnavailableException.class)
+    public ResponseEntity<RestErrorResponse> handlePricingUnavailable(PricingUnavailableException exception) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+    }
+
     @ExceptionHandler(AssignmentConflictException.class)
     public ResponseEntity<RestErrorResponse> handleConflict(AssignmentConflictException exception) {
         return error(HttpStatus.CONFLICT, exception.getMessage());

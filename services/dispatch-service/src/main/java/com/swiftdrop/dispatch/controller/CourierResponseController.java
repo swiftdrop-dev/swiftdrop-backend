@@ -1,5 +1,6 @@
 package com.swiftdrop.dispatch.controller;
 
+import com.swiftdrop.dispatch.client.CourierDirectoryClient;
 import com.swiftdrop.dispatch.dto.ApiResponse;
 import com.swiftdrop.dispatch.dto.request.CourierOfferDecisionRequest;
 import com.swiftdrop.dispatch.dto.response.DispatchJobResponse;
@@ -23,15 +24,17 @@ import java.util.UUID;
 public class CourierResponseController {
 
     private final DispatchJobService jobService;
+    private final CourierDirectoryClient courierDirectoryClient;
 
-    public CourierResponseController(DispatchJobService jobService) {
+    public CourierResponseController(DispatchJobService jobService, CourierDirectoryClient courierDirectoryClient) {
         this.jobService = jobService;
+        this.courierDirectoryClient = courierDirectoryClient;
     }
 
     @GetMapping("/my-jobs")
     public ResponseEntity<ApiResponse<List<DispatchJobSummaryResponse>>> getMyJobs() {
-        UUID courierId = SecurityUtils.requireMappedActorId();
-        List<DispatchJobSummaryResponse> jobs = jobService.getCourierJobs(courierId);
+        SecurityUtils.requireMappedActorId();
+        List<DispatchJobSummaryResponse> jobs = jobService.getCourierJobs(courierDirectoryClient.currentProfileId());
         return ResponseEntity.ok(ApiResponse.success(jobs));
     }
 
@@ -39,8 +42,8 @@ public class CourierResponseController {
     public ResponseEntity<ApiResponse<DispatchJobResponse>> submitDecision(
             @PathVariable("id") UUID id,
             @Valid @RequestBody CourierOfferDecisionRequest request) {
-        UUID courierId = SecurityUtils.requireMappedActorId();
-        DispatchJobResponse response = jobService.handleCourierDecision(id, courierId, request);
+        SecurityUtils.requireMappedActorId();
+        DispatchJobResponse response = jobService.handleCourierDecision(id, courierDirectoryClient.currentProfileId(), request);
         return ResponseEntity.ok(ApiResponse.success("Decision recorded", response));
     }
 }

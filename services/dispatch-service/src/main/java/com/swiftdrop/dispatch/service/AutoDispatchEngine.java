@@ -19,12 +19,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import com.swiftdrop.dispatch.client.CourierDirectoryClient;
+import com.swiftdrop.dispatch.exception.AssignmentConflictException;
+import com.swiftdrop.dispatch.exception.CourierDirectoryUnavailableException;
+import com.swiftdrop.dispatch.exception.InvalidDispatchStateException;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class AutoDispatchEngine {
@@ -37,17 +41,20 @@ public class AutoDispatchEngine {
     private final ProximityMatchingService proximityMatchingService;
     private final OutboxEventService outboxEventService;
     private final ObjectMapper objectMapper;
+    private final CourierDirectoryClient courierDirectoryClient;
 
     public AutoDispatchEngine(DispatchJobRepository jobRepository,
                               DispatchAssignmentRepository assignmentRepository,
                               ProximityMatchingService proximityMatchingService,
                               OutboxEventService outboxEventService,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              CourierDirectoryClient courierDirectoryClient) {
         this.jobRepository = jobRepository;
         this.assignmentRepository = assignmentRepository;
         this.proximityMatchingService = proximityMatchingService;
         this.outboxEventService = outboxEventService;
         this.objectMapper = objectMapper;
+        this.courierDirectoryClient = courierDirectoryClient;
     }
 
     @Scheduled(fixedDelay = 15000) // Run every 15s
@@ -106,7 +113,7 @@ public class AutoDispatchEngine {
     @Transactional
     public boolean autoAssignJob(DispatchJob job) {
         // Collect previously declined/offered couriers for this job
-        Set<UUID> excludedCourierIds = new HashSet<>();
+        Set<String> excludedCourierIds = new HashSet<>();
         for (DispatchAssignment da : job.getAssignments()) {
             excludedCourierIds.add(da.getCourierId());
         }
@@ -125,6 +132,18 @@ public class AutoDispatchEngine {
         }
 
         CourierCandidateResponse bestCourier = candidates.get(0);
+        try {
+            courierDirectoryClient.requireEligible(bestCourier.getCourierId());
+        } catch (InvalidDispatchStateException | CourierDirectoryUnavailableException | AssignmentConflictException ex) {
+            log.info("Skipping auto-dispatch for job {} because courier {} is not eligible", job.getId(), bestCourier.getCourierId());
+            return false;
+        }
+        if (jobRepository.existsByCourierIdAndStatusInAndIdNot(
+                bestCourier.getCourierId(),
+                List.of(DispatchStatus.ASSIGNED_PENDING_ACCEPTANCE, DispatchStatus.ACCEPTED, DispatchStatus.IN_PROGRESS),
+                job.getId())) {
+            return false;
+        }
         Instant now = Instant.now();
         Instant expiresAt = now.plus(OFFER_TTL_SECONDS, ChronoUnit.SECONDS);
 

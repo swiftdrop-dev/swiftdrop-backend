@@ -1,6 +1,7 @@
 package com.swiftdrop.parcel.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.parcel.client.PricingServiceClient;
 import com.swiftdrop.parcel.dto.request.CreateParcelBookingRequest;
 import com.swiftdrop.parcel.entity.OutboxEvent;
 import com.swiftdrop.parcel.entity.Parcel;
@@ -33,6 +34,9 @@ class ParcelBookingServiceTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private PricingServiceClient pricingServiceClient;
+
     private ObjectMapper objectMapper;
     private ParcelBookingService parcelBookingService;
 
@@ -44,8 +48,11 @@ class ParcelBookingServiceTest {
                 parcelRepository,
                 outboxEventService,
                 objectMapper,
-                applicationEventPublisher
+                applicationEventPublisher,
+                pricingServiceClient
         );
+        lenient().when(pricingServiceClient.calculateEstimate(any(), any(), any(), any()))
+                .thenReturn(new BigDecimal("850.00"));
     }
 
     @Test
@@ -60,7 +67,12 @@ class ParcelBookingServiceTest {
                 "EXPRESS",
                 true,
                 "COD",
-                new BigDecimal("850.00")
+                new BigDecimal("1.00"),
+                "Kamal Sender",
+                "+94770000000",
+                "ZONE_WP_COLOMBO",
+                "ZONE_CP_KANDY",
+                "STANDARD"
         );
 
         when(parcelRepository.save(any(Parcel.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -72,6 +84,9 @@ class ParcelBookingServiceTest {
         assertEquals("CREATED", saved.getStatus());
         assertEquals(new BigDecimal("4.50"), saved.getWeightKg());
         assertEquals(new BigDecimal("850.00"), saved.getTotalFee());
+        assertEquals("Kamal Sender", saved.getSenderName());
+        assertEquals("+94770000000", saved.getSenderPhone());
+        assertNotEquals(saved.getRecipientName(), saved.getSenderName());
         assertTrue(saved.getFragile());
 
         // Verify outbox event was saved with aggregate type and id
@@ -105,7 +120,12 @@ class ParcelBookingServiceTest {
                 "STANDARD",
                 false,
                 "COD",
-                new BigDecimal("500.00")
+                new BigDecimal("500.00"),
+                "Kamal Sender",
+                "+94770000000",
+                "ZONE_WP_COLOMBO",
+                "ZONE_WP_COLOMBO",
+                "STANDARD"
         );
 
         when(parcelRepository.save(any(Parcel.class))).thenThrow(new RuntimeException("Database error"));
