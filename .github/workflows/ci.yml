@@ -6,9 +6,44 @@ on:
   pull_request:
     branches: [ main, dev ]
 
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  test:
+    name: Test ${{ matrix.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # webhook-service is an unused shell and its context test requires RabbitMQ.
+        include:
+          - name: API Gateway
+            path: api-gateway
+          - name: Auth Service
+            path: services/auth-service
+          - name: Merchant Service
+            path: services/merchant-service
+          - name: Parcel Service
+            path: services/parcel-service
+          - name: Pricing Service
+            path: services/pricing-service
+          - name: Dispatch Service
+            path: services/dispatch-service
+            postgres: true
+          - name: Courier Service
+            path: services/courier-service
+          - name: Tracking Service
+            path: services/tracking-service
+          - name: Notification Service
+            path: services/notification-service
+          - name: Reporting Service
+            path: services/reporting-service
 
     steps:
       - name: Checkout Repository
@@ -19,31 +54,16 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: 'maven'
+          cache: maven
+          cache-dependency-path: ${{ matrix.path }}/pom.xml
 
-      - name: Test API Gateway
-        working-directory: api-gateway
-        run: ./mvnw clean test -B
-
-      - name: Test Auth Service
-        working-directory: services/auth-service
-        run: ./mvnw clean test -B
-
-      - name: Test Merchant Service
-        working-directory: services/merchant-service
-        run: ./mvnw clean test -B
-
+      # Dispatch migration tests start a private cluster with initdb. They do not use Neon.
       - name: Install PostgreSQL for dispatch migration tests
-        run: sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql
+        if: matrix.postgres
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql
 
-      - name: Test Dispatch Service
-        working-directory: services/dispatch-service
-        run: ./mvnw clean test -B
-
-      - name: Test Parcel Service
-        working-directory: services/parcel-service
-        run: ./mvnw clean test -B
-
-      - name: Test Courier Service
-        working-directory: services/courier-service
-        run: ./mvnw clean test -B
+      - name: Run Maven tests
+        working-directory: ${{ matrix.path }}
+        run: ./mvnw -B -ntp test
